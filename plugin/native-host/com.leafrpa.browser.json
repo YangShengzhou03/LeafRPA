@@ -1,0 +1,9 @@
+{
+  "name": "com.leafrpa.browser",
+  "description": "轻羽RPA 浏览器自动化原生宿主",
+  "path": "leaf_host.bat",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://lgmllpehpgpjgnldlplldncljmmpdjhj/"
+  ]
+}

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>轻羽RPA</title>
+  <style>
+    body { width: 280px; margin: 0; font-family: system-ui, "Microsoft YaHei", sans-serif; color: #1f2329; background: #fff; }
+    header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #f0f0f0; }
+    .logo { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, #ff7d7d, #f53f3f); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .title { font-size: 14px; font-weight: 600; flex: 1; }
+    .ver { font-size: 11px; color: #a8abb2; }
+    .section { padding: 12px 14px; }
+    .row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #4e5969; margin-bottom: 8px; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: #c9cdd4; }
+    .dot.on { background: #00b42a; }
+    .dot.off { background: #f53f3f; }
+    button { width: 100%; margin-top: 6px; padding: 8px 0; border: none; border-radius: 6px; background: #f53f3f; color: #fff; font-size: 13px; cursor: pointer; }
+    button.ghost { background: #f7f8fa; color: #1f2329; border: 1px solid #e5e6eb; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    #picked { margin-top: 10px; padding: 8px; background: #f7f8fa; border-radius: 6px; font-size: 11px; color: #4e5969; line-height: 1.6; word-break: break-all; display: none; }
+    #picked b { color: #1f2329; }
+    #msg { margin-top: 8px; font-size: 11px; color: #f53f3f; min-height: 14px; }
+    .ok { color: #00b42a !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">羽</div>
+    <div class="title">轻羽RPA · 网页自动化</div>
+    <div class="ver">v1.0.0</div>
+  </header>
+  <div class="section">
+    <div class="row">
+      <span><i id="statusDot" class="dot"></i>桌面端连接</span>
+      <span id="statusText">检测中…</span>
+    </div>
+    <button id="pickBtn">抓取元素</button>
+    <button id="getTextBtn" class="ghost">读取页面标题（测试）</button>
+    <div id="picked"></div>
+    <div id="msg"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

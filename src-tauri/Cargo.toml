@@ -1,0 +1,25 @@
+[package]
+name = "leaf-rpa"
+version = "0.1.0"
+description = "Leaf RPA - 自动化流程设计器"
+edition = "2021"
+
+[lib]
+name = "leaf_rpa_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["process", "io-util", "time", "macros", "rt-multi-thread"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
