@@ -21,6 +21,7 @@ import BottomPanel from './BottomPanel.vue'
 import WindowControls from './WindowControls.vue'
 
 import { useAppStore, type FlowIssue } from '../store'
+import { suggestName } from '../elements'
 import { pollPluginEvents, runWebCommand } from '../web-executor'
 import { toastError, toastSuccess, toastWarning } from '../notify'
 
@@ -262,9 +263,26 @@ async function pollRecord() {
     const selector = String(payload.cssSelector ?? '')
     const text = String(payload.text ?? '').slice(0, 40)
     recordItems.value.push({ seq: ev.seq, tag, selector, text })
+    // 录制到的元素同样进元素库，与手动抓取共用一份清单
+    const el = store.addElement({
+      name: suggestName({
+        tagName: tag,
+        id: String(payload.id ?? ''),
+        text: String(payload.text ?? ''),
+        placeholder: String(payload.placeholder ?? ''),
+        name: String(payload.name ?? ''),
+      }),
+      selector,
+      xpath: String(payload.xpath ?? '') || undefined,
+      tagName: tag,
+      text: String(payload.text ?? ''),
+      similarCount: Number(payload.similarCount) || undefined,
+      url: String(payload.url ?? ''),
+      title: String(payload.pageTitle ?? ''),
+    })
     store.appendNode('get-element-web', `元素 ${tag}`, {
       selector,
-      variable: `el${recordItems.value.length}`,
+      variable: el?.name ?? `el${recordItems.value.length}`,
     })
     store.log('success', `智能录制采集：<${tag}> ${selector.slice(0, 60)}`)
   }

@@ -5,6 +5,15 @@ import * as bridge from './bridge'
 import { ensurePlugin, runWebCommand, WEB_COMMAND_MAP } from './web-executor'
 import { toastError, toastWarning } from './notify'
 import { interpolate, declaresElement, declareKind, isDeclareKey, refsIn, type VariableDecl, type VarKind } from './vars'
+import {
+  groupElements,
+  loadElements,
+  saveElements,
+  suggestName,
+  uniqueName,
+  type CapturedElement,
+  type ElementGroup,
+} from './elements'
 import type { CommandDefinition, Flow, FlowEdge, FlowMeta, FlowNode, LogEntry } from './types'
 
 export type TabKey = 'app' | 'trigger' | 'market' | 'tutorial' | 'community'
@@ -23,6 +32,10 @@ interface AppState {
   linkingFrom: string | null
   /** 步骤剪贴板（Ctrl+C / Ctrl+V 用，仅内存态） */
   clipboard: FlowNode | null
+  /** 元素库：所有捕获入口共享的元素清单（本地持久化） */
+  elements: CapturedElement[]
+  /** 元素库当前选中的元素 id */
+  selectedElementId: string | null
   logs: LogEntry[]
   running: boolean
   /** 运行中请求停止（在当前节点结束后终止） */
@@ -122,6 +135,8 @@ export const useAppStore = defineStore('app', {
     selectedNodeId: null,
     linkingFrom: null,
     clipboard: null,
+    elements: loadElements(),
+    selectedElementId: null,
     logs: [],
     running: false,
     stopRequested: false,
@@ -146,6 +161,15 @@ export const useAppStore = defineStore('app', {
     selectedCommand(state): CommandDefinition | null {
       const node = state.current?.nodes.find((n) => n.id === state.selectedNodeId)
       return node ? commandByType(node.type) ?? null : null
+    },
+    /** 元素库按来源页面分组后的视图 */
+    elementGroups(state): { group: ElementGroup; items: CapturedElement[] }[] {
+      return groupElements(state.elements)
+    },
+    /** 元素库当前选中的元素 */
+    selectedElement(state): CapturedElement | null {
+      if (!state.selectedElementId) return null
+      return state.elements.find((el) => el.id === state.selectedElementId) ?? null
     },
   },
   actions: {
@@ -565,6 +589,108 @@ export const useAppStore = defineStore('app', {
     },
     removeGlobalVar(name: string) {
       this.globalVars = this.globalVars.filter((v) => v.name !== name)
+    },
+    /* ---------- 元素库 ---------- */
+    /**
+     * 把一个捕获到的页面元素收进元素库，并同步为元素变量。
+     * 所有捕获入口（元素库采集、fx 抓取、属性面板抓取、智能录制）都走这里，
+     * 保证「捕获到就进元素库」这一条链路一致。
+     * @returns 入库后的元素；同名时自动追加序号
+     */
+    addElement(input: {
+      name?: string
+      selector: string
+      xpath?: string
+      tagName?: string
+      text?: string
+      similarCount?: number
+      url?: string
+      title?: string
+    }): CapturedElement | null {
+      const selector = String(input.selector ?? '').trim()
+      if (!selector) return null
+      const taken = new Set(this.elements.map((el) => el.name))
+      // 未指定名称时按「文本 → 标签」推导，与元素库抓取提示保持一致
+      const base = input.name?.trim() || suggestName(input) || 'element'
+      const name = uniqueName(base, taken)
+      const el: CapturedElement = {
+        id: `el_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+        name,
+        selector,
+        xpath: input.xpath || undefined,
+        tagName: input.tagName || undefined,
+        text: input.text ? input.text.slice(0, 60) : undefined,
+        similarCount: input.similarCount,
+        url: input.url || undefined,
+        title: input.title || undefined,
+        createdAt: Date.now(),
+      }
+      this.elements.unshift(el)
+      this.selectedElementId = el.id
+      saveElements(this.elements)
+      this.upsertVar(name, 'element', {
+        selector,
+        summary: this.elementSummaryOf(el),
+      })
+      return el
+    },
+    /** 元素库行的展示摘要：<button> 文本片段 */
+    elementSummaryOf(el: CapturedElement): string {
+      const tag = el.tagName ? `<${el.tagName}>` : ''
+      const text = el.text ? ` ${el.text.slice(0, 24)}` : ''
+      return `${tag}${text}`.trim() || el.selector.slice(0, 40)
+    },
+    /** 删除元素库中的元素，同时移除对应的元素变量 */
+    removeElement(id: string) {
+      const target = this.elements.find((el) => el.id === id)
+      this.elements = this.elements.filter((el) => el.id !== id)
+      if (this.selectedElementId === id) this.selectedElementId = null
+      saveElements(this.elements)
+      if (target) {
+        // 同名元素可能还有别的条目，只有彻底不存在时才删变量
+        if (!this.elements.some((el) => el.name === target.name)) {
+          this.removeGlobalVar(target.name)
+        }
+      }
+    },
+    /** 重命名元素：同步改名对应的元素变量，保持引用一致 */
+    renameElement(id: string, rawName: string): boolean {
+      const el = this.elements.find((e) => e.id === id)
+      const name = rawName.trim()
+      if (!el || !name) return false
+      if (name === el.name) return true
+      if (this.elements.some((e) => e.id !== id && e.name === name)) {
+        toastWarning('元素名已存在，请更换名称', { title: '名称重复' })
+        return false
+      }
+      const oldName = el.name
+      el.name = name
+      saveElements(this.elements)
+      // 变量表同步改名，保留选择器
+      const decl = this.globalVars.find((v) => v.name === oldName)
+      if (decl) decl.name = name
+      else this.upsertVar(name, 'element', { selector: el.selector, summary: this.elementSummaryOf(el) })
+      return true
+    },
+    /** 更新元素选择器（元素变了但变量名不变） */
+    updateElementSelector(id: string, selector: string) {
+      const el = this.elements.find((e) => e.id === id)
+      const next = selector.trim()
+      if (!el || !next) return
+      el.selector = next
+      saveElements(this.elements)
+      this.upsertVar(el.name, 'element', { selector: next, summary: this.elementSummaryOf(el) })
+    },
+    /** 把元素库中已有的元素重新同步为元素变量（启动时调用，修复历史数据） */
+    syncElementVars() {
+      this.elements.forEach((el) => {
+        const exist = this.globalVars.find((v) => v.name === el.name)
+        if (exist && exist.kind === 'element') {
+          if (!exist.selector) exist.selector = el.selector
+          return
+        }
+        this.upsertVar(el.name, 'element', { selector: el.selector, summary: this.elementSummaryOf(el) })
+      })
     },
     /** 声明或更新变量；已存在时仅更新类型 */
     upsertVar(name: string, kind: VarKind, extra?: { selector?: string; summary?: string }) {

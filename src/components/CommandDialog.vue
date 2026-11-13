@@ -10,6 +10,7 @@ import { commandByType } from '../commands'
 import { useAppStore } from '../store'
 import type { CommandParam, FlowNode } from '../types'
 import { declaresElement, declareKind, isDeclareKey, refsIn } from '../vars'
+import { suggestName } from '../elements'
 import { pickElement } from '../web-executor'
 import CodeEditor from './CodeEditor.vue'
 import VariableInput from './VariableInput.vue'
@@ -90,6 +91,16 @@ async function startPick(key: string) {
   try {
     const { selector, element } = await pickElement(token)
     draft[key] = selector
+    // 捕获到即入库：抓取的元素统一进元素库，之后可从元素库直接引用
+    store.addElement({
+      name: suggestName(element),
+      selector,
+      xpath: element.xpath,
+      tagName: element.tagName,
+      text: element.text,
+      similarCount: element.similarCount,
+      url: element.url,
+    })
     store.log('success', `已抓取元素 <${element.tagName}>${element.id ? '#' + element.id : ''}：${selector}`)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

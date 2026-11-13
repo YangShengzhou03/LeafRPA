@@ -51,6 +51,8 @@ onMounted(async () => {
   media.addEventListener('change', onMediaChange)
   auth.restoreSession()
   if (!auth.session) return
+  // 元素库在 store 初始化时从本地读取，这里把历史元素重新同步为元素变量
+  store.syncElementVars()
   try {
     await store.loadDataDir()
     await store.refreshFlows()
