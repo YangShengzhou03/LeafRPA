@@ -105,9 +105,14 @@ export async function ensurePlugin(opts?: { launch?: boolean; timeoutMs?: number
  * 通过插件执行一条网页指令。
  * @param type 应用指令 type（如 open-web），内部映射为插件 payload.type
  * @param params 节点参数（node.props）
+ * @param tabId 目标标签页；省略时插件在当前活动标签页执行
  * @returns 插件返回的 data
  */
-export async function runWebCommand(type: string, params: Record<string, unknown>): Promise<unknown> {
+export async function runWebCommand(
+  type: string,
+  params: Record<string, unknown>,
+  tabId?: number,
+): Promise<unknown> {
   const payloadType = WEB_COMMAND_MAP[type] ?? type
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 30_000)
@@ -116,7 +121,12 @@ export async function runWebCommand(type: string, params: Record<string, unknown
     res = await fetch(`${PLUGIN_HTTP}/exec`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: payloadType, payload: params, timeout: 30 }),
+      body: JSON.stringify({
+        type: payloadType,
+        payload: params,
+        ...(tabId ? { tabId } : {}),
+        timeout: 30,
+      }),
       signal: controller.signal,
     })
   } catch (err) {
@@ -177,8 +187,8 @@ export interface DomTree {
 }
 
 /** 取元素在 DOM 中的层级链（祖先 + 自身 + 子节点） */
-export async function getNodeTree(selector: string): Promise<DomTree> {
-  const data = (await runWebCommand('get-node-tree', { selector })) as DomTree | null
+export async function getNodeTree(selector: string, tabId?: number): Promise<DomTree> {
+  const data = (await runWebCommand('get-node-tree', { selector }, tabId)) as DomTree | null
   return data ?? { ancestors: [], self: null, children: [] }
 }
 
@@ -193,8 +203,8 @@ export interface ElementAttributes {
 }
 
 /** 读取元素的属性表 */
-export async function getElementAttributes(selector: string): Promise<ElementAttributes> {
-  const data = (await runWebCommand('get-attributes', { selector })) as ElementAttributes | null
+export async function getElementAttributes(selector: string, tabId?: number): Promise<ElementAttributes> {
+  const data = (await runWebCommand('get-attributes', { selector }, tabId)) as ElementAttributes | null
   if (!data) throw new Error('读取元素属性失败')
   return data
 }
@@ -212,8 +222,9 @@ export interface SelectorCheck {
 export async function validateSelector(
   selector: string,
   type: 'css' | 'xpath' = 'css',
+  tabId?: number,
 ): Promise<SelectorCheck> {
-  const data = (await runWebCommand('validate-selector', { selector, type })) as SelectorCheck | null
+  const data = (await runWebCommand('validate-selector', { selector, type }, tabId)) as SelectorCheck | null
   if (!data) throw new Error('选择器校验失败')
   return data
 }
@@ -223,9 +234,12 @@ export async function validateSelector(
  * @returns 所选元素的最佳选择器（优先含 id 的 CSS 路径，其次 XPath）
  * 调用方可通过 cancelToken.cancelled = true 取消等待。
  */
-export async function pickElement(cancelToken?: PickState): Promise<{ selector: string; element: PickedElement }> {
+export async function pickElement(
+  cancelToken?: PickState,
+  tabId?: number,
+): Promise<{ selector: string; element: PickedElement }> {
   const startedAt = Date.now() / 1000
-  await runWebCommand('leaf:pick-start', {})
+  await runWebCommand('leaf:pick-start', {}, tabId)
   try {
     const deadline = Date.now() + 120_000 // 最长等待 2 分钟
     let lastError = ''
@@ -258,7 +272,12 @@ export async function pickElement(cancelToken?: PickState): Promise<{ selector: 
     fetch(`${PLUGIN_HTTP}/exec`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'leaf:pick-stop', payload: {}, timeout: 5 }),
+      body: JSON.stringify({
+        type: 'leaf:pick-stop',
+        payload: {},
+        ...(tabId ? { tabId } : {}),
+        timeout: 5,
+      }),
     }).catch(() => {})
   }
 }

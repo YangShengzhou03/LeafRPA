@@ -76,6 +76,8 @@ onMounted(async () => {
     xpathSelector.value = p.xpath ?? ''
     selectorType.value = 'css'
   }
+  // 先锁定元素来源所在的标签页，再加载数据（否则会读到浏览器当前活动页面）
+  targetTabId.value = await resolveTargetTab()
   if (activeSelector.value) void loadElement(activeSelector.value)
 })
 
@@ -87,12 +89,53 @@ const tree = ref<{ ancestors: DomNodeInfo[]; self: DomNodeInfo | null; children:
 })
 const attrs = ref<ElementAttributes | null>(null)
 
+/** 当前元素所在标签页 id（定位到来源页面，避免受浏览器当前活动标签影响） */
+const targetTabId = ref<number | undefined>(undefined)
+
+/**
+ * 找出元素来源页面所在的标签页。
+ *
+ * 元素库里存的是抓取时的 url，但用户在编辑器里操作时浏览器可能已切到别的页面，
+ * 若直接用「活动标签」会读到错误页面，表现为「捕获/校验都匹配不到」。
+ * 这里按 url 归一化后比对，命中则锁定该标签页。
+ */
+async function resolveTargetTab(): Promise<number | undefined> {
+  const srcUrl = payload.value?.url
+  if (!srcUrl) return undefined
+  try {
+    const data = (await runWebCommand('list-web-pages', {})) as
+      | { tabs: { id: number; url: string; active: boolean }[] }
+      | null
+    const tabs = data?.tabs ?? []
+    if (!tabs.length) return undefined
+    const norm = (u: string) => {
+      try {
+        const x = new URL(u)
+        return `${x.origin}${x.pathname}`
+      } catch {
+        return u.split('#')[0].split('?')[0]
+      }
+    }
+    const want = norm(srcUrl)
+    const hit =
+      tabs.find((t) => norm(t.url) === want) ??
+      tabs.find((t) => t.active) ??
+      tabs[0]
+    return hit?.id
+  } catch {
+    return undefined
+  }
+}
+
 async function loadElement(selector: string) {
   if (!selector.trim()) return
   loading.value = true
   loadError.value = ''
   try {
-    const [t, a] = await Promise.all([getNodeTree(selector), getElementAttributes(selector)])
+    const [t, a] = await Promise.all([
+      getNodeTree(selector, targetTabId.value),
+      getElementAttributes(selector, targetTabId.value),
+    ])
     tree.value = t
     attrs.value = a
     if (!cssSelector.value) cssSelector.value = t.self?.cssSelector ?? selector
@@ -147,8 +190,9 @@ function syncRowsFromAttributes(a: ElementAttributes) {
   ]
   rows.value = ordered.slice(0, 12).map((k) => {
     const row = newRow(k, String(map[k] ?? '').slice(0, 60))
-    // innerText / type 是点击类元素最稳的定位依据，默认勾上
-    row.checked = k === 'innerText' || k === 'type'
+    // 只默认勾 innerText：它最能唯一定位（走 XPath）。
+    // type/class 这类属性常在同页重复，勾上反而会让 CSS 变宽泛。
+    row.checked = k === 'innerText'
     return row
   })
   if (!rows.value.length) rows.value = [newRow()]
@@ -162,7 +206,13 @@ function removeRow(id: string) {
   rows.value = rows.value.filter((r) => r.id !== id)
 }
 
-/** 由勾选的属性行拼出 CSS 选择器 */
+/**
+ * 由勾选的属性行拼出 CSS 选择器。
+ *
+ * 注意 CSS 无法按文本匹配（innerText），因此：
+ * - 若只勾了 innerText，返回空串，交给 XPath；
+ * - index / index-of-type 用 :nth-of-type / :nth-child 表达。
+ */
 function buildCssFromRows(): string {
   const picked = rows.value.filter((r) => r.checked && r.name.trim())
   if (!picked.length) return ''
@@ -172,13 +222,15 @@ function buildCssFromRows(): string {
   for (const r of picked) {
     const key = r.name.trim()
     const val = r.value.trim()
-    if (!val) continue
     if (key === 'innerText') continue // CSS 无法按文本匹配，交给 XPath
     if (key === 'index-of-type') {
-      indexOfType = val
+      if (val !== '') indexOfType = val
       continue
     }
+    // index 是同类中的位置，与 index-of-type 等价，优先用 index-of-type
     if (key === 'index') continue
+    // 空值不能拼进选择器（如 type="" 会永远匹配不到）
+    if (!val) continue
     if (key === 'class') {
       // 多 class 用 .a.b 形式
       const parts2 = val.split(/\s+/).filter(Boolean).map((c) => `.${cssEscape(c)}`)
@@ -190,8 +242,10 @@ function buildCssFromRows(): string {
     else if (r.match === 'startsWith') parts.push(`[${key}^="${cssEscapeValue(val)}"]`)
     else if (r.match === 'endsWith') parts.push(`[${key}$="${cssEscapeValue(val)}"]`)
   }
+  // 只勾了 innerText：CSS 无从表达，返回空让调用方走 XPath
+  if (!parts.length && indexOfType === null) return ''
   let out = `${tag}${parts.join('')}`
-  if (indexOfType) out += `:nth-of-type(${Number(indexOfType) + 1})`
+  if (indexOfType !== null) out += `:nth-of-type(${Number(indexOfType) + 1})`
   return out
 }
 
@@ -214,17 +268,37 @@ function buildXpathFromRows(): string {
       continue
     }
     if (key === 'index-of-type') {
-      indexOfType = val
+      if (val !== '') indexOfType = val
       continue
     }
     if (key === 'index') continue
+    // 空值不能拼进表达式（如 @type='' 会永远匹配不到）
+    if (!val) continue
+    if (key === 'class') {
+      // class 是多值属性：@class='a b' 精确匹配会被顺序/多余类名破坏，
+      // 改为逐类 contains(concat(' ', @class, ' '), ' a ') 判断
+      const classes = val.split(/\s+/).filter(Boolean)
+      if (r.match === 'equals') {
+        classes.forEach((c) =>
+          conds.push(`contains(concat(' ', normalize-space(@class), ' '), ' ${xpathQuote(c)} ')`),
+        )
+      } else {
+        conds.push(`contains(@class, '${xpathQuote(val)}')`)
+      }
+      continue
+    }
     if (r.match === 'equals') conds.push(`@${key}='${xpathQuote(val)}'`)
     else if (r.match === 'contains') conds.push(`contains(@${key}, '${xpathQuote(val)}')`)
     else if (r.match === 'startsWith') conds.push(`starts-with(@${key}, '${xpathQuote(val)}')`)
     else if (r.match === 'endsWith') conds.push(`substring(@${key}, string-length(@${key}) - string-length('${xpathQuote(val)}') + 1) = '${xpathQuote(val)}'`)
     else conds.push(`matches(@${key}, '${xpathQuote(val)}')`)
   }
-  if (indexOfType) conds.push(`position()=${Number(indexOfType) + 1}`)
+  // position() 在 //tag[...] 里是「每个父节点下的序号」，
+  // 想取全局第 N 个同类元素必须写成 (//tag[...])[N]
+  if (indexOfType !== null) {
+    const pred = conds.length ? `[${conds.join(' and ')}]` : ''
+    return `(//${tag}${pred})[${Number(indexOfType) + 1}]`
+  }
   const pred = conds.length ? `[${conds.join(' and ')}]` : ''
   return `//${tag}${pred}`
 }
@@ -239,20 +313,31 @@ function cssEscapeValue(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
-/** XPath 字符串字面量转义 */
+/**
+ * XPath 字符串字面量转义。
+ * XPath 没有转义符，含单引号时只能用 concat() 拼接；
+ * 这里直接拒绝含引号的文本，避免生成无法解析的表达式。
+ */
 function xpathQuote(s: string): string {
-  return s.replace(/'/g, "&apos;")
+  return s.replace(/'/g, "’")
 }
 
 const previewCss = computed(() => buildCssFromRows())
 const previewXpath = computed(() => buildXpathFromRows())
 
-/** 勾选变化时把拼出的选择器写回对应类型 */
+/**
+ * 勾选变化时同步选择器。
+ *
+ * 关键：只勾 innerText 时 CSS 无法表达（返回空串），
+ * 此时自动切到 XPath，否则用户点「校验」会拿着旧/空 CSS 去查，报「匹配不到」。
+ * 只在用户改属性表时切换，不覆盖手动选择的类型之外的情况。
+ */
 watch(
   [previewCss, previewXpath],
   ([css, xp]) => {
     if (css) cssSelector.value = css
     if (xp) xpathSelector.value = xp
+    if (!css && xp) selectorType.value = 'xpath'
   },
 )
 
@@ -281,7 +366,7 @@ const repicking = ref(false)
 async function rePick() {
   repicking.value = true
   try {
-    const { selector, element } = await pickElement()
+    const { selector, element } = await pickElement(undefined, targetTabId.value)
     cssSelector.value = selector
     xpathSelector.value = element.xpath || ''
     selectorType.value = 'css'
@@ -308,7 +393,7 @@ async function pickSimilar() {
     return
   }
   try {
-    const data = (await runWebCommand('get-similar-web', { selector, limit: 200 })) as
+    const data = (await runWebCommand('get-similar-web', { selector, limit: 200 }, targetTabId.value)) as
       | { count: number; items: PickedElement[] }
       | null
     const count = data?.count ?? 0
@@ -333,10 +418,11 @@ async function check() {
   checking.value = true
   checkResult.value = null
   try {
-    const res = await validateSelector(selector, selectorType.value)
+    const res = await validateSelector(selector, selectorType.value, targetTabId.value)
     checkResult.value = res
-    if (!res.ok) toastError('未在页面上匹配到元素', { title: '校验失败' })
-    else if (res.unique) toastSuccess('唯一匹配 1 个元素', { title: '校验通过', duration: 1800 })
+    if (!res.ok) {
+      toastError('未在页面上匹配到元素，请确认浏览器仍停在该页面', { title: '校验失败', duration: 3000 })
+    } else if (res.unique) toastSuccess('唯一匹配 1 个元素', { title: '校验通过', duration: 1800 })
     else toastWarning(`匹配到 ${res.count} 个元素，建议增加条件`, { title: '匹配不唯一', duration: 2600 })
   } catch (e) {
     toastError((e as Error).message, { title: '校验失败' })
@@ -386,6 +472,10 @@ async function done() {
       selector,
       xpath: xpathSelector.value.trim() || undefined,
       selectorType: selectorType.value,
+      tagName: tree.value.self?.tagName,
+      text: tree.value.self?.text || undefined,
+      url: payload.value?.url,
+      title: payload.value?.title,
     })
   } catch (e) {
     toastError((e as Error).message, { title: '保存失败' })

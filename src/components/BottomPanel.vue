@@ -261,6 +261,8 @@ onMounted(async () => {
       if (el.name !== name && !store.renameElement(el.id, name)) return
       store.updateElementSelector(el.id, selector)
       if (res.xpath) el.xpath = res.xpath
+      if (res.tagName) el.tagName = res.tagName
+      if (res.text) el.text = res.text
       saveElements(store.elements)
       store.syncElementVars()
       toastSuccess(`已更新元素：${name}`, { title: '已保存', duration: 1800 })
@@ -271,6 +273,8 @@ onMounted(async () => {
       name,
       selector,
       xpath: res.xpath,
+      tagName: res.tagName,
+      text: res.text,
       url: draftSource.value?.url,
       title: draftSource.value?.title,
     })

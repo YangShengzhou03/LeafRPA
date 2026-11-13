@@ -53,22 +53,6 @@ onMounted(async () => {
   if (!auth.session) return
   // 元素库在 store 初始化时从本地读取，这里把历史元素重新同步为元素变量
   store.syncElementVars()
-  // TEMP-DEBUG 临时钩子：验证元素编辑器窗口能否创建，验证完删除
-  ;(window as unknown as Record<string, unknown>).__openEditor = async () => {
-    try {
-      const mod = await import('./element-editor')
-      await mod.openElementEditor({ name: '调试元素', selector: '#dbg', title: '调试' })
-      return 'ok'
-    } catch (e) {
-      return 'ERR: ' + (e as Error).message
-    }
-  }
-  // TEMP-DEBUG 启动后自动开一次编辑器窗口，用于确认窗口能否显示
-  if (location.search.includes('autoEditor')) {
-    setTimeout(() => {
-      void (window as unknown as { __openEditor?: () => Promise<string> }).__openEditor?.()
-    }, 1500)
-  }
   try {
     await store.loadDataDir()
     await store.refreshFlows()

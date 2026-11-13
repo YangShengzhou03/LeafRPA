@@ -42,6 +42,14 @@ export interface ElementEditorResult {
   xpath?: string
   /** 选择器类型：默认选择器(css) / XPath */
   selectorType: 'css' | 'xpath'
+  /** 元素标签名，新建入库时用于元素库展示 */
+  tagName?: string
+  /** 元素文本片段 */
+  text?: string
+  /** 元素来源页面 url（重新捕获后可能变化） */
+  url?: string
+  /** 元素来源页面标题 */
+  title?: string
   cancel?: boolean
 }
 
