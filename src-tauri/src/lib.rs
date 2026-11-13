@@ -27,6 +27,8 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             commands::ensure_flows_dir(&handle)?;
+            // 元素编辑器窗口的数据共享状态
+            app.manage(commands::ElementEditorState::default());
 
             // 系统托盘：显示主界面 / 退出
             let show = MenuItem::with_id(app, "show", "显示主界面", true, None::<&str>)?;
@@ -57,7 +59,11 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             // 按设置分流关闭请求：退出 / 最小化窗口 / 最小化到托盘
+            // 仅对主窗口生效，元素编辑器等子窗口关掉就是关掉
             if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() != "main" {
+                    return;
+                }
                 let action = commands::load_settings(window.app_handle()).close_action;
                 match action.as_str() {
                     "minimize" => {
@@ -84,6 +90,10 @@ pub fn run() {
             commands::set_close_action,
             commands::set_data_root,
             commands::pick_folder,
+            commands::set_element_editor_data,
+            commands::take_element_editor_data,
+            commands::open_element_editor,
+            commands::close_element_editor,
             python::run_python_code,
             python::launch_chrome,
         ])

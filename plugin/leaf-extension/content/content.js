@@ -669,6 +669,105 @@
       return { info: collectElementInfo(el) }
     },
 
+    /**
+     * { selector, depth?, siblingLimit? } → 元素在 DOM 中的层级链
+     * 返回 ancestors（从 html 到父节点）+ 自身 + children（子节点），
+     * 供元素编辑器左侧层级树展开使用。
+     */
+    'leaf:get-node-tree': (p) => {
+      const el = findBySelector(p.selector)
+      const depth = Math.max(1, Math.min(30, Number(p.depth) || 12))
+      const siblingLimit = Math.max(1, Math.min(100, Number(p.siblingLimit) || 20))
+      const describe = (node, selected = false) => {
+        if (!node || node.nodeType !== 1) return null
+        const own = Array.from(node.attributes || [])
+        const idAttr = own.find((a) => a.name === 'id')
+        const cls = String(node.className ?? '').trim()
+        return {
+          tagName: node.nodeName.toLowerCase(),
+          id: idAttr ? idAttr.value : '',
+          classes: cls,
+          text: (node.textContent || '').trim().slice(0, 80),
+          selected,
+          childCount: node.children.length,
+          /** 该节点可用的选择器，点层级树时直接采用 */
+          cssSelector: cssPath(node),
+          xpath: xpathOf(node),
+        }
+      }
+      // 祖先链：从根到父节点
+      const ancestors = []
+      let cur = el.parentElement
+      let guard = 0
+      while (cur && guard < depth && cur.nodeName.toLowerCase() !== 'html') {
+        ancestors.unshift(describe(cur))
+        cur = cur.parentElement
+        guard += 1
+      }
+      const children = Array.from(el.children)
+        .slice(0, siblingLimit)
+        .map((c) => describe(c))
+      return {
+        ancestors: ancestors.filter(Boolean),
+        self: describe(el, true),
+        children: children.filter(Boolean),
+      }
+    },
+
+    /**
+     * { selector } → 属性表
+     * 返回全部属性 + innerText / 常用可匹配属性，供「精准定位」属性表编辑。
+     */
+    'leaf:get-attributes': (p) => {
+      const el = findBySelector(p.selector)
+      flashHighlight(el)
+      const attrs = {}
+      for (const a of el.attributes) attrs[a.name] = a.value
+      return {
+        info: collectElementInfo(el),
+        attributes: attrs,
+        attributesList: Object.keys(attrs).map((name) => ({ name, value: attrs[name] })),
+        innerText: (el.textContent || '').trim().slice(0, 200),
+        index: Array.from(el.parentElement?.children ?? []).indexOf(el),
+        indexOfType: Array.from(el.parentElement?.children ?? [])
+          .filter((c) => c.nodeName === el.nodeName)
+          .indexOf(el),
+      }
+    },
+
+    /**
+     * { selector, type?: 'css'|'xpath' } → 选择器校验
+     * 返回是否唯一命中、命中数量与首个匹配元素的信息。
+     */
+    'leaf:validate-selector': (p) => {
+      const raw = typeof p.selector === 'string' ? p.selector.trim() : ''
+      if (!raw) throw new Error('缺少元素选择器')
+      const isXPath = p.type === 'xpath' || /^xpath=/i.test(raw) || raw.startsWith('/') || raw.startsWith('(')
+      const expr = /^xpath=/i.test(raw) ? raw.slice(6).trim() : raw
+      let nodes = []
+      if (isXPath) {
+        const snap = document.evaluate(expr, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null)
+        for (let i = 0; i < snap.snapshotLength; i += 1) {
+          const n = snap.snapshotItem(i)
+          if (n && n.nodeType === 1) nodes.push(n)
+        }
+      } else {
+        nodes = Array.from(document.querySelectorAll(expr))
+      }
+      const first = nodes[0] ?? null
+      if (first) {
+        first.scrollIntoView({ block: 'center' })
+        flashHighlight(first, 1200)
+      }
+      return {
+        ok: nodes.length > 0,
+        unique: nodes.length === 1,
+        count: nodes.length,
+        type: isXPath ? 'xpath' : 'css',
+        info: first ? collectElementInfo(first) : null,
+      }
+    },
+
     /** { selector, relation: 'parent'|'child'|'next'|'prev' } → 关联元素信息 */
     'leaf:get-related': (p) => {
       const el = findBySelector(p.selector)

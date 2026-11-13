@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { ArrowDown, ArrowUp, Close, Delete, DocumentCopy, EditPen, Link, Minus, Monitor, Plus, Position } from '@element-plus/icons-vue'
 import { useAppStore } from '../store'
 import { pickElement, runWebCommand, type PickedElement } from '../web-executor'
 import { copyText } from '../clipboard'
-import { suggestName, saveElements } from '../elements'
+import { suggestName, saveElements, type CapturedElement } from '../elements'
+import {
+  listenElementEditorDone,
+  openElementEditor,
+  payloadOfElement,
+} from '../element-editor'
 import { toastError, toastSuccess, toastWarning } from '../notify'
 
 const store = useAppStore()
@@ -201,6 +206,82 @@ function confirmRename() {
 function cancelRename() {
   renamingId.value = null
 }
+
+/* ---------- 元素编辑器子窗口 ---------- */
+
+/** 新建元素时记住来源页面，便于元素库分组 */
+const draftSource = ref<{ url: string; title: string } | null>(null)
+
+/** 打开元素编辑器：编辑现有元素，或传入空数据新建 */
+async function openEditor(el?: CapturedElement) {
+  if (el) {
+    draftSource.value = null
+    try {
+      await openElementEditor(payloadOfElement(el))
+    } catch (e) {
+      toastError((e as Error).message, { title: '打开元素编辑器失败' })
+    }
+    return
+  }
+  // 新建：以当前选中元素所在页面为来源，取不到则留空
+  const src = selectedElement.value
+  draftSource.value = src?.url
+    ? { url: src.url, title: src.title ?? '' }
+    : null
+  try {
+    await openElementEditor({
+      name: '',
+      selector: '',
+      url: draftSource.value?.url,
+      title: draftSource.value?.title,
+    })
+  } catch (e) {
+    toastError((e as Error).message, { title: '打开元素编辑器失败' })
+  }
+}
+
+/**
+ * 子窗口点「完成」后回传结果：
+ * 已有元素走原地更新（名称可能改动，需同步元素变量），
+ * 新建元素则入库。
+ */
+let unlistenEditor: (() => void) | null = null
+
+onMounted(async () => {
+  unlistenEditor = await listenElementEditorDone((res) => {
+    if (res.cancel) return
+    const name = res.name.trim()
+    const selector = res.selector.trim()
+    if (!name || !selector) return
+
+    if (res.id) {
+      const el = store.elements.find((e) => e.id === res.id)
+      if (!el) return
+      // 名字改过时先校验重名，再同步元素变量
+      if (el.name !== name && !store.renameElement(el.id, name)) return
+      store.updateElementSelector(el.id, selector)
+      if (res.xpath) el.xpath = res.xpath
+      saveElements(store.elements)
+      store.syncElementVars()
+      toastSuccess(`已更新元素：${name}`, { title: '已保存', duration: 1800 })
+      return
+    }
+
+    const created = store.addElement({
+      name,
+      selector,
+      xpath: res.xpath,
+      url: draftSource.value?.url,
+      title: draftSource.value?.title,
+    })
+    if (created) toastSuccess(`已加入元素库：${created.name}`, { title: '已保存', duration: 1800 })
+  })
+})
+
+onBeforeUnmount(() => {
+  unlistenEditor?.()
+  unlistenEditor = null
+})
 
 /* ---------- 面板高度可调（拖拽 / 双击复位 / 键盘微调，本地持久化） ---------- */
 const HEIGHT_KEY = 'leaf-rpa.bottom-panel.height'
@@ -469,9 +550,13 @@ onBeforeUnmount(() => {
           <!-- 右：选中元素的详情 / 采集表单 -->
           <div class="ele-detail">
             <div class="ele-detail-head">
-              <el-button class="head-btn" @click="captureVisible = !captureVisible">
+              <el-button class="head-btn" @click="openEditor()">
                 <el-icon :size="12"><Plus /></el-icon>
                 捕获新元素
+              </el-button>
+              <el-button class="head-btn" :disabled="!selectedElement" @click="openEditor(selectedElement!)">
+                <el-icon :size="12"><EditPen /></el-icon>
+                编辑元素
               </el-button>
               <el-dropdown trigger="click" class="ele-detail-more">
                 <el-button class="deco-btn" text>
@@ -479,6 +564,9 @@ onBeforeUnmount(() => {
                 </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
+                    <el-dropdown-item @click="captureVisible = !captureVisible">
+                      手动填写选择器
+                    </el-dropdown-item>
                     <el-dropdown-item :disabled="!elements.length" @click="clearElements">
                       清空元素库
                     </el-dropdown-item>

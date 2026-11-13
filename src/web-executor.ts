@@ -23,6 +23,9 @@ export const WEB_COMMAND_MAP: Record<string, string> = {
   'set-value-web': 'leaf:set-value',
   'set-attr-web': 'leaf:set-attribute',
   'get-element-web': 'leaf:get-element',
+  'get-node-tree': 'leaf:get-node-tree',
+  'get-attributes': 'leaf:get-attributes',
+  'validate-selector': 'leaf:validate-selector',
   'get-related-web': 'leaf:get-related',
   'get-similar-web': 'leaf:get-similar',
   // 既有网页指令同样切换到插件执行通道
@@ -153,6 +156,66 @@ export interface PickedElement {
 
 interface PickState {
   cancelled: boolean
+}
+
+/** DOM 层级树中的单个节点 */
+export interface DomNodeInfo {
+  tagName: string
+  id: string
+  classes: string
+  text: string
+  selected?: boolean
+  childCount?: number
+  cssSelector: string
+  xpath: string
+}
+
+export interface DomTree {
+  ancestors: DomNodeInfo[]
+  self: DomNodeInfo | null
+  children: DomNodeInfo[]
+}
+
+/** 取元素在 DOM 中的层级链（祖先 + 自身 + 子节点） */
+export async function getNodeTree(selector: string): Promise<DomTree> {
+  const data = (await runWebCommand('get-node-tree', { selector })) as DomTree | null
+  return data ?? { ancestors: [], self: null, children: [] }
+}
+
+/** 属性表查询结果 */
+export interface ElementAttributes {
+  info: PickedElement | null
+  attributes: Record<string, string>
+  attributesList: { name: string; value: string }[]
+  innerText: string
+  index: number
+  indexOfType: number
+}
+
+/** 读取元素的属性表 */
+export async function getElementAttributes(selector: string): Promise<ElementAttributes> {
+  const data = (await runWebCommand('get-attributes', { selector })) as ElementAttributes | null
+  if (!data) throw new Error('读取元素属性失败')
+  return data
+}
+
+/** 选择器校验结果 */
+export interface SelectorCheck {
+  ok: boolean
+  unique: boolean
+  count: number
+  type: 'css' | 'xpath'
+  info: PickedElement | null
+}
+
+/** 在页面上校验选择器，返回命中数量与首个元素信息 */
+export async function validateSelector(
+  selector: string,
+  type: 'css' | 'xpath' = 'css',
+): Promise<SelectorCheck> {
+  const data = (await runWebCommand('validate-selector', { selector, type })) as SelectorCheck | null
+  if (!data) throw new Error('选择器校验失败')
+  return data
 }
 
 /**

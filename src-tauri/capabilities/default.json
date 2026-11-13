@@ -2,15 +2,20 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capability set for the main window",
-  "windows": ["main"],
+  "windows": ["main", "element-editor"],
   "permissions": [
     "core:default",
     "core:window:allow-scale-factor",
     "core:window:allow-inner-size",
     "core:window:allow-minimize",
+    "core:window:allow-unminimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
     "core:window:allow-is-maximized",
-    "core:window:allow-start-dragging"
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
+    "core:webview:allow-get-all-webviews",
+    "core:event:allow-emit",
+    "core:event:allow-listen"
   ]
 }

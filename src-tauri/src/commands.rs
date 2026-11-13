@@ -367,3 +367,92 @@ pub fn pick_folder() -> Option<String> {
         .map(|p| p.to_string_lossy().to_string())
 }
 
+/// 元素编辑器子窗口的固定标签。
+pub const ELEMENT_EDITOR_LABEL: &str = "element-editor";
+
+/// 元素编辑器待加载的数据（由主窗口写入，子窗口启动时取一次）。
+///
+/// 选择器里含 `#`、`&`、引号等字符，走窗口 URL 会被截断或转义出错，
+/// 因此用共享状态传递：主窗口 `set_element_editor_data` → 打开窗口 →
+/// 子窗口 `take_element_editor_data`。
+#[derive(Default)]
+pub struct ElementEditorState(pub std::sync::Mutex<Option<String>>);
+
+/// 主窗口：把要编辑的元素写进共享状态。
+///
+/// # Errors
+///
+/// 当互斥锁被毒化时返回错误信息。
+#[tauri::command]
+pub fn set_element_editor_data(
+    state: tauri::State<'_, ElementEditorState>,
+    payload: String,
+) -> Result<(), String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    *guard = Some(payload);
+    drop(guard);
+    Ok(())
+}
+
+/// 子窗口：取出待编辑的元素（取一次即清空）。
+///
+/// # Errors
+///
+/// 当互斥锁被毒化时返回错误信息。
+#[tauri::command]
+pub fn take_element_editor_data(
+    state: tauri::State<'_, ElementEditorState>,
+) -> Result<Option<String>, String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(guard.take())
+}
+
+/// 打开（或聚焦）元素编辑器子窗口。
+///
+/// 窗口已存在时聚焦并重新加载，让前端重新读取最新数据。
+///
+/// # Errors
+///
+/// 当窗口创建或加载失败时返回错误信息。
+#[tauri::command]
+pub fn open_element_editor(app: AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window(ELEMENT_EDITOR_LABEL) {
+        win.navigate(
+            "index.html?elementEditor=1"
+                .parse()
+                .map_err(|e| format!("解析元素编辑器地址失败: {e}"))?,
+        )
+        .map_err(|e| format!("重载元素编辑器失败: {e}"))?;
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+        return Ok(());
+    }
+
+    let url = tauri::WebviewUrl::App("index.html?elementEditor=1".into());
+    tauri::WebviewWindowBuilder::new(&app, ELEMENT_EDITOR_LABEL, url)
+        .title("元素编辑器")
+        .inner_size(680.0, 640.0)
+        .min_inner_size(560.0, 480.0)
+        .decorations(false)
+        .shadow(false)
+        .resizable(true)
+        .center()
+        .build()
+        .map_err(|e| format!("创建元素编辑器窗口失败: {e}"))?;
+    Ok(())
+}
+
+/// 关闭元素编辑器子窗口。
+///
+/// # Errors
+///
+/// 当窗口关闭失败时返回错误信息。
+#[tauri::command]
+pub fn close_element_editor(app: AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window(ELEMENT_EDITOR_LABEL) {
+        win.close().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
