@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
-import { ArrowUp, Close, Delete, Minus, Plus } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, Close, Delete, DocumentCopy, EditPen, Link, Minus, Monitor, Plus, Position } from '@element-plus/icons-vue'
 import { useAppStore } from '../store'
-import { pickElement, runWebCommand } from '../web-executor'
+import { pickElement, runWebCommand, type PickedElement } from '../web-executor'
+import { copyText } from '../clipboard'
+import { suggestName, saveElements } from '../elements'
 import { toastError, toastSuccess, toastWarning } from '../notify'
 
 const store = useAppStore()
@@ -49,71 +51,60 @@ function fmt(ts: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
-/* ---------- 元素库：采集到的页面元素即「元素变量」（本地持久化） ---------- */
-interface CapturedElement {
-  id: string
-  name: string
-  selector: string
-  createdAt: number
+/* ---------- 元素库：数据存在 store，此处只负责展示与交互 ---------- */
+const elements = computed(() => store.elements)
+const elementGroups = computed(() => store.elementGroups)
+const selectedElement = computed(() => store.selectedElement)
+/** 选中元素的 {{引用}} 文本（模板内直接写会与插值语法冲突） */
+const refText = computed(() => (selectedElement.value ? `{{${selectedElement.value.name}}}` : ''))
+/** 折叠的页面分组 id 集合 */
+const collapsedGroups = ref<Set<string>>(new Set())
+
+function toggleGroup(id: string) {
+  const next = new Set(collapsedGroups.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  collapsedGroups.value = next
 }
 
-const ELEMENTS_KEY = 'leaf-rpa.elements.v1'
-
-function loadElements(): CapturedElement[] {
-  try {
-    const raw = localStorage.getItem(ELEMENTS_KEY)
-    if (!raw) return []
-    const arr = JSON.parse(raw)
-    return Array.isArray(arr) ? arr : []
-  } catch {
-    return []
-  }
+function selectElement(id: string) {
+  store.selectedElementId = store.selectedElementId === id ? null : id
 }
 
-function saveElements() {
-  try {
-    localStorage.setItem(ELEMENTS_KEY, JSON.stringify(elements.value))
-  } catch {
-    /* 忽略本地存储失败 */
-  }
-}
-
-const elements = ref<CapturedElement[]>(loadElements())
 const captureVisible = ref(false)
 const captureSelector = ref('')
 const captureName = ref('')
 const capturing = ref(false)
-const capturing2 = ref(false)
-
-/** 把元素库中的元素同步为元素变量，供 fx 变量选择器使用 */
-function syncElementVars() {
-  elements.value.forEach((el) => {
-    store.upsertVar(el.name, 'element', { selector: el.selector })
-  })
-}
-
-onMounted(syncElementVars)
-
-function openCapture() {
-  captureSelector.value = ''
-  captureName.value = ''
-  captureVisible.value = true
-}
+const picking = ref(false)
 
 /** 到浏览器页面上点选元素，自动回填选择器与名称 */
 async function pickFromPage() {
-  if (capturing2.value) return
-  capturing2.value = true
+  if (picking.value) return
+  picking.value = true
   try {
     const { selector, element } = await pickElement()
     captureSelector.value = selector
     if (!captureName.value.trim()) {
-      captureName.value = element.text?.trim().slice(0, 20) || element.tagName
+      captureName.value = suggestName(element)
+    }
+    // 抓取到的元素直接入库
+    const el = store.addElement({
+      name: captureName.value.trim() || suggestName(element),
+      selector,
+      xpath: element.xpath,
+      tagName: element.tagName,
+      text: element.text,
+      similarCount: element.similarCount,
+      url: element.url,
+    })
+    if (el) {
+      captureName.value = el.name
+      toastSuccess(`已加入元素库：{{${el.name}}}`, { title: '抓取成功', duration: 2200 })
     }
   } catch (e) {
     toastError((e as Error).message, { title: '抓取失败' })
   } finally {
-    capturing2.value = false
+    picking.value = false
   }
 }
 
@@ -125,18 +116,28 @@ async function captureElement() {
   }
   capturing.value = true
   try {
-    await runWebCommand('get-element-web', { selector, variable: '__capturedElement' })
-    const name = captureName.value.trim() || selector
-    elements.value.unshift({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      name,
+    const data = (await runWebCommand('get-element-web', {
       selector,
-      createdAt: Date.now(),
+      variable: '__capturedElement',
+    })) as { info?: PickedElement } | null
+    const info = data?.info
+    const el = store.addElement({
+      name: captureName.value.trim() || (info ? suggestName(info) : '') || selector,
+      selector,
+      xpath: info?.xpath,
+      tagName: info?.tagName,
+      text: info?.text,
+      similarCount: info?.similarCount,
+      url: info?.url,
     })
-    saveElements()
-    store.upsertVar(name, 'element', { selector })
+    if (!el) {
+      toastWarning('选择器为空，未加入元素库', { title: '保存失败' })
+      return
+    }
+    captureName.value = el.name
+    captureSelector.value = ''
     captureVisible.value = false
-    toastSuccess(`元素已存为元素变量 {{${name}}}`, { title: '采集成功', duration: 2200 })
+    toastSuccess(`元素已存为元素变量 {{${el.name}}}`, { title: '采集成功', duration: 2200 })
   } catch (e) {
     toastError((e as Error).message, { title: '采集失败' })
   } finally {
@@ -144,11 +145,61 @@ async function captureElement() {
   }
 }
 
+/** 复制元素引用 {{name}}，便于在指令参数里直接粘贴 */
+async function copyRef(el: { name: string }) {
+  const ok = await copyText(`{{${el.name}}}`)
+  if (ok) toastSuccess(`已复制 {{${el.name}}}`, { title: '已复制引用', duration: 1800 })
+  else toastWarning('复制失败，请手动输入引用', { title: '复制失败' })
+}
+
 function removeElement(id: string) {
-  const target = elements.value.find((el) => el.id === id)
-  elements.value = elements.value.filter((el) => el.id !== id)
-  saveElements()
-  if (target) store.removeGlobalVar(target.name)
+  store.removeElement(id)
+}
+
+/** 清空元素库（危险操作，需确认） */
+async function clearElements() {
+  if (!elements.value.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确定清空元素库？将移除 ${elements.value.length} 个元素及其对应的元素变量，已引用这些变量的指令会失效。`,
+      '清空元素库',
+      { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  const names = elements.value.map((el) => el.name)
+  store.elements = []
+  store.selectedElementId = null
+  saveElements([])
+  names.forEach((n) => store.removeGlobalVar(n))
+  toastSuccess('元素库已清空', { title: '已清空' })
+}
+
+/** 重命名：元素库面板内联编辑 */
+const renamingId = ref<string | null>(null)
+const renameValue = ref('')
+
+function startRename(el: { id: string; name: string }) {
+  renamingId.value = el.id
+  renameValue.value = el.name
+  void nextTick(() => {
+    const input = document.querySelector<HTMLInputElement>('.ele-rename input')
+    input?.focus()
+    input?.select()
+  })
+}
+
+function confirmRename() {
+  if (!renamingId.value) return
+  const id = renamingId.value
+  // 先收起编辑态，避免 blur 与 enter 重复触发
+  renamingId.value = null
+  store.renameElement(id, renameValue.value)
+}
+
+function cancelRename() {
+  renamingId.value = null
 }
 
 /* ---------- 面板高度可调（拖拽 / 双击复位 / 键盘微调，本地持久化） ---------- */
@@ -330,10 +381,6 @@ onBeforeUnmount(() => {
           </el-tab-pane>
         </el-tabs>
         <el-button v-if="active === 'logs'" class="head-btn" text @click="clearLogs">清空</el-button>
-        <el-button v-if="active === 'elements'" class="head-btn" @click="openCapture">
-          <el-icon :size="12"><Plus /></el-icon>
-          添加新元素
-        </el-button>
         <span class="deco">
           <el-tooltip content="折叠面板" placement="bottom" :show-after="300">
             <el-button class="deco-btn" text circle @click="collapsePanel">
@@ -365,50 +412,198 @@ onBeforeUnmount(() => {
       </template>
 
       <template v-else-if="active === 'elements'">
-        <div v-if="captureVisible" class="ele-capture">
-          <div class="cap-field">
-            <label>元素选择器（CSS / XPath）</label>
-            <div class="cap-pick-row">
-              <el-input
-                v-model="captureSelector"
-                placeholder="例如 #submit-btn 或 //button[@id='submit']"
-                clearable
-                @keyup.enter="captureElement"
-              />
-              <el-button :loading="capturing2" @click="pickFromPage">抓取</el-button>
+        <div class="ele-layout">
+          <!-- 左：按来源页面分组的元素树 -->
+          <div class="ele-tree">
+            <div v-if="elements.length === 0" class="ele-tree-empty">
+              <el-empty description="暂无元素，点击右上角「捕获新元素」开始采集" :image-size="64" />
             </div>
+            <template v-else>
+              <div v-for="g in elementGroups" :key="g.group.id" class="ele-group">
+                <button class="ele-group-head" @click="toggleGroup(g.group.id)">
+                  <el-icon class="ele-caret" :class="{ folded: collapsedGroups.has(g.group.id) }" :size="11">
+                    <ArrowDown />
+                  </el-icon>
+                  <el-icon class="ele-page-icon" :size="13"><Monitor /></el-icon>
+                  <span class="ele-group-title" :title="g.group.url">{{ g.group.title }}</span>
+                  <span class="ele-group-count">{{ g.group.count }}</span>
+                </button>
+                <div v-show="!collapsedGroups.has(g.group.id)" class="ele-group-body">
+                  <div
+                    v-for="el in g.items"
+                    :key="el.id"
+                    class="ele-row"
+                    :class="{ active: store.selectedElementId === el.id }"
+                    role="button"
+                    tabindex="0"
+                    @click="selectElement(el.id)"
+                    @keydown.enter="selectElement(el.id)"
+                  >
+                    <el-icon class="ele-link-icon" :size="13"><Link /></el-icon>
+                    <template v-if="renamingId === el.id">
+                      <el-input
+                        v-model="renameValue"
+                        size="small"
+                        class="ele-rename"
+                        @click.stop
+                        @keyup.enter="confirmRename"
+                        @keyup.esc="cancelRename"
+                        @blur="confirmRename"
+                      />
+                    </template>
+                    <template v-else>
+                      <span
+                        class="ele-name"
+                        :title="`${el.name}\n${el.selector}`"
+                        @dblclick.stop="startRename(el)"
+                      >
+                        {{ el.name }}
+                      </span>
+                    </template>
+                  </div>
+                </div>
+              </div>
+            </template>
           </div>
-          <div class="cap-field">
-            <label>元素变量名</label>
-            <el-input
-              v-model="captureName"
-              placeholder="留空则使用选择器作为变量名"
-              clearable
-              @keyup.enter="captureElement"
-            />
-          </div>
-          <p class="capture-tip">
-            保存前会在浏览器中校验元素是否存在，需要已安装并连接轻羽浏览器插件；保存后可在任意输入框的 fx 中选择该元素变量。
-          </p>
-          <div class="cap-actions">
-            <el-button @click="captureVisible = false">取消</el-button>
-            <el-button type="primary" :loading="capturing" @click="captureElement">
-              校验并保存
-            </el-button>
-          </div>
-        </div>
-        <div v-else-if="elements.length === 0" class="ele-empty">
-          <el-empty description="暂无元素，可通过「添加新元素」采集页面元素" :image-size="70" />
-        </div>
-        <div v-else class="ele-list">
-          <div v-for="el in elements" :key="el.id" class="ele-row">
-            <span class="ele-name" :title="el.name">{{ el.name }}</span>
-            <span class="ele-sel" :title="el.selector">{{ el.selector }}</span>
-            <el-tooltip content="删除" placement="top" :show-after="300">
-              <button class="ele-del" @click="removeElement(el.id)">
-                <el-icon :size="12"><Delete /></el-icon>
-              </button>
-            </el-tooltip>
+
+          <!-- 右：选中元素的详情 / 采集表单 -->
+          <div class="ele-detail">
+            <div class="ele-detail-head">
+              <el-button class="head-btn" @click="captureVisible = !captureVisible">
+                <el-icon :size="12"><Plus /></el-icon>
+                捕获新元素
+              </el-button>
+              <el-dropdown trigger="click" class="ele-detail-more">
+                <el-button class="deco-btn" text>
+                  <el-icon :size="14"><ArrowDown /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item :disabled="!elements.length" @click="clearElements">
+                      清空元素库
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+
+            <!-- 采集表单 -->
+            <div v-if="captureVisible" class="ele-capture">
+              <div class="cap-field">
+                <label>元素选择器（CSS / XPath）</label>
+                <div class="cap-pick-row">
+                  <el-input
+                    v-model="captureSelector"
+                    placeholder="例如 #submit-btn 或 //button[@id='submit']"
+                    clearable
+                    @keyup.enter="captureElement"
+                  />
+                  <el-button :loading="picking" @click="pickFromPage">
+                    <el-icon :size="12"><Position /></el-icon>
+                    抓取
+                  </el-button>
+                </div>
+              </div>
+              <div class="cap-field">
+                <label>元素变量名</label>
+                <el-input
+                  v-model="captureName"
+                  placeholder="留空则根据元素文本自动命名"
+                  clearable
+                  @keyup.enter="captureElement"
+                />
+              </div>
+              <p class="capture-tip">
+                抓取会在浏览器中校验元素是否存在，需要已安装并连接轻羽浏览器插件；保存后可在任意输入框的 fx 中选择该元素变量。
+              </p>
+              <div class="cap-actions">
+                <el-button @click="captureVisible = false">取消</el-button>
+                <el-button type="primary" :loading="capturing" @click="captureElement">
+                  校验并保存
+                </el-button>
+              </div>
+            </div>
+
+            <!-- 元素详情 -->
+            <div v-else-if="selectedElement" class="ele-info">
+              <div class="ei-head">
+                <span class="ei-title" :title="selectedElement.name">{{ selectedElement.name }}</span>
+                <span class="ei-tag">元素变量</span>
+              </div>
+              <div class="ei-grid">
+                <span class="ei-k">引用</span>
+                <div class="ei-v">
+                  <code class="ei-code">{{ refText }}</code>
+                  <el-tooltip content="复制引用" placement="top" :show-after="300">
+                    <button class="ei-act" @click="copyRef(selectedElement)">
+                      <el-icon :size="12"><DocumentCopy /></el-icon>
+                    </button>
+                  </el-tooltip>
+                </div>
+
+                <span class="ei-k">标签</span>
+                <div class="ei-v">
+                  <span v-if="selectedElement.tagName">&lt;{{ selectedElement.tagName }}&gt;</span>
+                  <span v-else class="ei-muted">—</span>
+                  <span v-if="selectedElement.similarCount && selectedElement.similarCount > 1" class="ei-similar">
+                    相似元素 {{ selectedElement.similarCount }} 个
+                  </span>
+                </div>
+
+                <span class="ei-k">文本</span>
+                <div class="ei-v">
+                  <span v-if="selectedElement.text" class="ei-ellipsis" :title="selectedElement.text">
+                    {{ selectedElement.text }}
+                  </span>
+                  <span v-else class="ei-muted">—</span>
+                </div>
+
+                <span class="ei-k">CSS</span>
+                <div class="ei-v">
+                  <code class="ei-code ei-ellipsis" :title="selectedElement.selector">
+                    {{ selectedElement.selector }}
+                  </code>
+                </div>
+
+                <span class="ei-k">XPath</span>
+                <div class="ei-v">
+                  <code v-if="selectedElement.xpath" class="ei-code ei-ellipsis" :title="selectedElement.xpath">
+                    {{ selectedElement.xpath }}
+                  </code>
+                  <span v-else class="ei-muted">—</span>
+                </div>
+
+                <span class="ei-k">来源</span>
+                <div class="ei-v">
+                  <span v-if="selectedElement.url" class="ei-ellipsis" :title="selectedElement.url">
+                    {{ selectedElement.title || selectedElement.url }}
+                  </span>
+                  <span v-else class="ei-muted">未知页面</span>
+                </div>
+              </div>
+              <div class="ei-actions">
+                <el-button size="small" @click="startRename(selectedElement)">
+                  <el-icon :size="12"><EditPen /></el-icon>
+                  重命名
+                </el-button>
+                <el-button size="small" @click="copyRef(selectedElement)">
+                  <el-icon :size="12"><DocumentCopy /></el-icon>
+                  复制引用
+                </el-button>
+                <el-button size="small" type="danger" plain @click="removeElement(selectedElement.id)">
+                  <el-icon :size="12"><Delete /></el-icon>
+                  删除
+                </el-button>
+              </div>
+            </div>
+
+            <!-- 未选中元素 -->
+            <div v-else class="ele-empty">
+              <el-empty
+                :description="elements.length ? '在左侧选择元素查看详情' : '捕获到的页面元素会出现在这里'"
+                :image-size="64"
+              />
+            </div>
           </div>
         </div>
       </template>
@@ -605,6 +800,172 @@ onBeforeUnmount(() => {
 .log-line.warn .msg { color: var(--el-color-warning); }
 .log-line.error .msg { color: var(--accent); }
 
+/* ---------- 元素库：左右分栏 ---------- */
+.ele-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* 左：来源页面分组树 */
+.ele-tree {
+  width: 300px;
+  flex-shrink: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border-right: 1px solid var(--border);
+}
+
+.ele-tree-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ele-group + .ele-group {
+  margin-top: 2px;
+}
+
+.ele-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 6px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+}
+
+.ele-group-head:hover {
+  background: var(--panel);
+}
+
+.ele-caret {
+  color: var(--text-3);
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+
+.ele-caret.folded {
+  transform: rotate(-90deg);
+}
+
+.ele-page-icon {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.ele-group-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ele-group-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.ele-group-body {
+  padding-left: 14px;
+}
+
+/* 元素行 */
+.ele-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ele-row:hover {
+  background: var(--panel);
+}
+
+.ele-row.active {
+  background: var(--row-selected);
+}
+
+.ele-row:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.ele-link-icon {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.ele-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ele-rename {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 右：详情面板 */
+.ele-detail {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ele-detail-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 8px 10px;
+}
+
+.ele-detail-head .head-btn {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--accent);
+  border-color: var(--border);
+}
+
+.ele-detail-head .head-btn:hover {
+  color: var(--accent-hover);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.ele-detail-more .deco-btn {
+  width: 24px;
+  height: 24px;
+  color: var(--text-3);
+}
+
 .ele-empty {
   flex: 1;
   display: flex;
@@ -612,80 +973,124 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 
-.ele-list {
+/* 元素详情内容 */
+.ele-info {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 6px 10px;
+  padding: 4px 12px 12px;
 }
 
-.ele-row {
+.ei-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
-  border-radius: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
 }
 
-.ele-row:hover {
-  background: var(--panel);
-}
-
-.ele-name {
-  font-size: 13px;
+.ei-title {
+  font-size: 14px;
+  font-weight: 500;
   color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ei-tag {
   flex-shrink: 0;
-  max-width: 40%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 11px;
+  color: var(--var-elem-fg);
+  background: var(--var-elem-bg);
+  border: 1px solid var(--var-elem-border);
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 17px;
 }
 
-.ele-sel {
-  flex: 1;
-  min-width: 0;
+.ei-grid {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  row-gap: 8px;
+  column-gap: 10px;
+  align-items: center;
   font-size: 12px;
+}
+
+.ei-k {
   color: var(--text-3);
+}
+
+.ei-v {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text);
+}
+
+.ei-code {
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+  font-size: 12px;
+  color: var(--var-elem-fg);
+  background: var(--var-elem-bg);
+  border-radius: 4px;
+  padding: 1px 6px;
+  min-width: 0;
+}
+
+.ei-ellipsis {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ele-del {
-  position: relative;
-  width: 22px;
-  height: 22px;
+.ei-muted {
+  color: var(--text-3);
+}
+
+.ei-similar {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 16px;
+}
+
+.ei-act {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
   border: none;
   background: transparent;
   border-radius: 4px;
   color: var(--text-3);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  flex-shrink: 0;
+  cursor: pointer;
 }
 
-/* 命中区向四周扩 5px */
-.ele-del::after {
-  content: '';
-  position: absolute;
-  inset: -5px;
-}
-
-.ele-row:hover .ele-del,
-.ele-row:focus-within .ele-del {
-  opacity: 1;
-}
-
-.ele-del:hover {
-  color: var(--el-color-danger);
+.ei-act:hover {
+  color: var(--text);
   background: var(--hover);
 }
 
+.ei-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* 采集表单 */
 .ele-capture {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 14px;
+  padding: 4px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;

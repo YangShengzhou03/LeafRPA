@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ElMessageBox } from 'element-plus'
 import { commandByType } from './commands'
 import * as bridge from './bridge'
+import type { CloseAction } from './bridge'
 import { ensurePlugin, runWebCommand, WEB_COMMAND_MAP } from './web-executor'
 import { toastError, toastWarning } from './notify'
 import { interpolate, declaresElement, declareKind, isDeclareKey, refsIn, type VariableDecl, type VarKind } from './vars'
@@ -9,6 +10,7 @@ import {
   groupElements,
   loadElements,
   saveElements,
+  suggestName,
   uniqueName,
   type CapturedElement,
   type ElementGroup,
@@ -55,6 +57,10 @@ interface AppState {
   savedAt: number | null
   /** 流程数据保存位置描述 */
   dataDir: string
+  /** 数据位置是否为用户自定义 */
+  dataRootCustom: boolean
+  /** 关闭按钮行为：exit / minimize / tray */
+  closeAction: CloseAction
   /** 当前打开的独立页面（路由），home 表示主界面 */
   page: PageKey
   /** 外观模式：light / dark / system */
@@ -149,6 +155,8 @@ export const useAppStore = defineStore('app', {
     dirty: false,
     savedAt: null,
     dataDir: '',
+    dataRootCustom: false,
+    closeAction: 'exit',
     page: 'home',
     themeMode: 'light',
   }),
@@ -210,6 +218,50 @@ export const useAppStore = defineStore('app', {
     },
     async loadDataDir() {
       this.dataDir = await bridge.getDataDir()
+      try {
+        const settings = await bridge.getAppSettings()
+        this.dataRootCustom = settings.dataRoot.trim() !== ''
+        this.closeAction = settings.closeAction
+      } catch {
+        /* 设置读取失败时保持默认 */
+      }
+    },
+    /** 修改关闭按钮行为并持久化 */
+    async setCloseAction(action: CloseAction) {
+      this.closeAction = action
+      try {
+        await bridge.setCloseAction(action)
+      } catch (err) {
+        toastError(`保存设置失败：${err instanceof Error ? err.message : String(err)}`)
+      }
+    },
+    /** 选择新的数据位置并迁移数据；返回是否成功 */
+    async changeDataRoot(): Promise<boolean> {
+      const picked = await bridge.pickFolder()
+      if (!picked) return false
+      try {
+        await bridge.setDataRoot(picked)
+        this.dataRootCustom = true
+        await this.loadDataDir()
+        await this.refreshFlows()
+        return true
+      } catch (err) {
+        toastError(`迁移数据失败：${err instanceof Error ? err.message : String(err)}`)
+        return false
+      }
+    },
+    /** 恢复默认数据位置并迁回数据；返回是否成功 */
+    async resetDataRoot(): Promise<boolean> {
+      try {
+        await bridge.setDataRoot('')
+        this.dataRootCustom = false
+        await this.loadDataDir()
+        await this.refreshFlows()
+        return true
+      } catch (err) {
+        toastError(`恢复默认位置失败：${err instanceof Error ? err.message : String(err)}`)
+        return false
+      }
     },
     async createAndOpen(name: string, type: Flow['type']) {
       try {
@@ -609,7 +661,9 @@ export const useAppStore = defineStore('app', {
       const selector = String(input.selector ?? '').trim()
       if (!selector) return null
       const taken = new Set(this.elements.map((el) => el.name))
-      const name = uniqueName(input.name?.trim() || input.tagName || 'element', taken)
+      // 未指定名称时按「文本 → 标签」推导，与元素库抓取提示保持一致
+      const base = input.name?.trim() || suggestName(input) || 'element'
+      const name = uniqueName(base, taken)
       const el: CapturedElement = {
         id: `el_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
         name,

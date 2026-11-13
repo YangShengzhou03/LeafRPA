@@ -103,6 +103,38 @@ export async function getDataDir(): Promise<string> {
   return '浏览器 localStorage（仅当前环境有效）'
 }
 
+/* ---------- 应用设置（数据位置 / 关闭行为） ---------- */
+
+export type CloseAction = 'exit' | 'minimize' | 'tray'
+
+export interface AppSettings {
+  dataRoot: string
+  closeAction: CloseAction
+}
+
+/** 读取应用设置（浏览器环境返回默认值） */
+export async function getAppSettings(): Promise<AppSettings> {
+  if (hasTauri) return invoke<AppSettings>('get_settings')
+  return { dataRoot: '', closeAction: 'exit' }
+}
+
+/** 设置关闭按钮行为 */
+export async function setCloseAction(action: CloseAction): Promise<void> {
+  if (hasTauri) return invoke<void>('set_close_action', { action })
+}
+
+/** 更改数据根目录并迁移流程文件；传空字符串恢复默认位置 */
+export async function setDataRoot(path: string): Promise<string> {
+  if (hasTauri) return invoke<string>('set_data_root', { path })
+  return '浏览器 localStorage（仅当前环境有效）'
+}
+
+/** 弹出系统目录选择对话框，取消时返回 null */
+export async function pickFolder(): Promise<string | null> {
+  if (hasTauri) return invoke<string | null>('pick_folder')
+  return null
+}
+
 export interface PythonResult {
   ok: boolean
   result: unknown
