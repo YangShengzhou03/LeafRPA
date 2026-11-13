@@ -124,6 +124,7 @@ watch(
   flex: 1;
   display: flex;
   min-height: 0;
+  background: var(--panel);
 }
 
 main {
@@ -134,5 +135,6 @@ main {
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
+  border-top-left-radius: 8px;
 }
 </style>
