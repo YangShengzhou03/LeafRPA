@@ -13,6 +13,12 @@ pub struct FlowNode {
     pub x: f64,
     pub y: f64,
     pub props: serde_json::Value,
+    /// 是否注释掉该步骤（运行与调试时跳过）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
+    /// 是否设置断点
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub breakpoint: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
