@@ -411,12 +411,17 @@ pub fn take_element_editor_data(
 ///
 /// 窗口已存在时聚焦并重新加载，让前端重新读取最新数据。
 ///
+/// 必须声明为 async：同步 command 在主线程执行，而 Windows 上创建 WebView2
+/// 需要主线程消息循环可重入，否则窗口会卡在空白/不显示。
+///
 /// # Errors
 ///
 /// 当窗口创建或加载失败时返回错误信息。
 #[tauri::command]
-pub fn open_element_editor(app: AppHandle) -> Result<(), String> {
+pub async fn open_element_editor(app: AppHandle) -> Result<(), String> {
+    eprintln!("[element-editor] open called");
     if let Some(win) = app.get_webview_window(ELEMENT_EDITOR_LABEL) {
+        eprintln!("[element-editor] reusing existing window, navigating");
         win.navigate(
             "index.html?elementEditor=1"
                 .parse()
@@ -430,17 +435,28 @@ pub fn open_element_editor(app: AppHandle) -> Result<(), String> {
     }
 
     let url = tauri::WebviewUrl::App("index.html?elementEditor=1".into());
-    tauri::WebviewWindowBuilder::new(&app, ELEMENT_EDITOR_LABEL, url)
+    eprintln!("[element-editor] building new window url={url}");
+    let built = tauri::WebviewWindowBuilder::new(&app, ELEMENT_EDITOR_LABEL, url)
         .title("元素编辑器")
         .inner_size(680.0, 640.0)
         .min_inner_size(560.0, 480.0)
         .decorations(false)
-        .shadow(false)
         .resizable(true)
         .center()
-        .build()
-        .map_err(|e| format!("创建元素编辑器窗口失败: {e}"))?;
-    Ok(())
+        .visible(true)
+        .build();
+    match built {
+        Ok(w) => {
+            eprintln!("[element-editor] window built ok, label={}", w.label());
+            let _ = w.show();
+            let _ = w.set_focus();
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("[element-editor] build FAILED: {e}");
+            Err(format!("创建元素编辑器窗口失败: {e}"))
+        }
+    }
 }
 
 /// 关闭元素编辑器子窗口。
@@ -449,7 +465,7 @@ pub fn open_element_editor(app: AppHandle) -> Result<(), String> {
 ///
 /// 当窗口关闭失败时返回错误信息。
 #[tauri::command]
-pub fn close_element_editor(app: AppHandle) -> Result<(), String> {
+pub async fn close_element_editor(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window(ELEMENT_EDITOR_LABEL) {
         win.close().map_err(|e| e.to_string())?;
     }
