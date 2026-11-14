@@ -113,7 +113,7 @@ scripts/setup-python.mjs
 
 ## 服务端部署（Docker 一键部署）
 
-服务端由三个容器组成：`mysql:8.0`（数据库，不暴露端口）、`leaf-rpa-backend`（Spring Boot，不暴露端口）、`leaf-rpa-frontend`（nginx，唯一入口 80/443，`/api/` 前缀反代后端）。镜像已发布到 Docker Hub：`yangshengzhou/leafrpa:backend-v1`、`yangshengzhou/leafrpa:frontend-v1`。
+服务端由三个容器组成：`mariadb:11`（数据库，不暴露端口）、`leaf-rpa-backend`（Spring Boot，不暴露端口）、`leaf-rpa-frontend`（nginx，唯一入口 80/443，`/api/` 前缀反代后端）。镜像已发布到 Docker Hub：`yangshengzhou/leafrpa:backend-v1`、`yangshengzhou/leafrpa:frontend-v1`。
 
 **前置条件**：一台装好 Docker（含 compose 插件）的 Linux 服务器，无需克隆仓库、无需手动配置密钥。
 

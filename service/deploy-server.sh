@@ -52,7 +52,7 @@ fi
 # 3. 预建虚拟网络（幂等：已存在则跳过）
 docker network inspect leaf-rpa-net >/dev/null 2>&1 || docker network create leaf-rpa-net
 
-# 4. 从 Docker Hub 拉取规范镜像（mysql 为官方镜像）
+# 4. 从 Docker Hub 拉取规范镜像（mariadb 为官方镜像）
 docker compose pull
 
 if [ "$1" = "check" ]; then
@@ -60,13 +60,13 @@ if [ "$1" = "check" ]; then
   exit 0
 fi
 
-# 5. 起容器（首次启动 mysql 自动执行 sql/init-db.sql 建表；数据落在命名卷，重启不丢）
+# 5. 起容器（首次启动 mariadb 自动执行 sql/init-db.sql 建表；数据落在命名卷，重启不丢）
 docker compose up -d
 
 # 6. 等待健康检查并输出状态
 echo "等待服务就绪..."
 for i in $(seq 1 30); do
-  if curl -sf http://127.0.0.1/api/actuator/health >/dev/null 2>&1; then
+  if curl -sf http://127.0.0.1/api/market/apps >/dev/null 2>&1; then
     break
   fi
   sleep 2
