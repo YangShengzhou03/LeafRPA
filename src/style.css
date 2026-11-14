@@ -32,7 +32,7 @@
   --el-color-primary-light-8: #fdd7d7;
   --el-color-primary-light-9: var(--accent-soft);
   --el-color-primary-dark-2: var(--accent-hover);
-  --el-border-radius-base: 6px;
+  --el-border-radius-base: 8px;
 }
 
 * {
@@ -92,7 +92,7 @@ textarea {
   background: var(--panel);
   display: flex;
   align-items: center;
-  padding: 0 6px 0 16px;
+  padding: 0 8px 0 16px;
   gap: 12px;
   flex-shrink: 0;
   position: relative;
@@ -116,7 +116,7 @@ textarea {
 .brand-logo img {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: 8px;
   display: block;
 }
 
@@ -132,9 +132,9 @@ textarea {
   color: #fff;
   background: linear-gradient(90deg, #5ab8ff 0%, #a05ff7 50%, #f74d87 100%);
   border-radius: 4px;
-  padding: 0 5px;
-  margin-left: 2px;
-  line-height: 18px;
+  padding: 0 4px;
+  margin-left: 4px;
+  line-height: 16px;
   align-self: center;
 }
 
@@ -151,11 +151,11 @@ textarea {
 .tab {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 36px;
-  padding: 0 14px;
+  padding: 0 16px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-2);
   position: relative;
@@ -183,15 +183,15 @@ textarea {
 .top-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .icon-btn {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text);
   display: flex;
   align-items: center;
@@ -236,16 +236,16 @@ textarea {
 .win-controls {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   margin-left: 8px;
 }
 
 .win-btn {
-  width: 34px;
+  width: 36px;
   height: 32px;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text);
   display: flex;
   align-items: center;
@@ -264,7 +264,7 @@ textarea {
 
 /* ---------- Sidebar ---------- */
 .sidebar {
-  width: 231px;
+  width: 232px;
   background: var(--panel);
   display: flex;
   flex-direction: column;
@@ -290,7 +290,7 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 4px;
   position: relative;
   overflow: hidden;
   transition: filter 0.2s ease, box-shadow 0.2s ease;
@@ -326,11 +326,11 @@ textarea {
 }
 
 .create-menu {
-  margin: -6px -10px;
+  margin: -8px -12px;
 }
 
 .menu-group {
-  padding: 2px 0;
+  padding: 4px 0;
 }
 
 .menu-group + .menu-group {
@@ -340,7 +340,7 @@ textarea {
 .menu-group-title {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   padding: 8px 12px 4px;
   font-size: 12px;
   color: var(--text-3);
@@ -364,7 +364,7 @@ textarea {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 12px;
+  padding: 8px 12px;
   border: none;
   background: transparent;
   text-align: left;
@@ -378,8 +378,8 @@ textarea {
 }
 
 .menu-icon {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -388,7 +388,7 @@ textarea {
 }
 
 .side-section {
-  margin-top: 9px;
+  margin-top: 8px;
 }
 
 .side-title {
@@ -469,10 +469,10 @@ textarea {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   text-align: left;
   color: var(--text);
   cursor: pointer;
@@ -495,7 +495,7 @@ textarea {
 .flow-item .thumb {
   width: 20px;
   height: 20px;
-  border-radius: 5px;
+  border-radius: 4px;
   background: var(--accent);
   color: #fff;
   font-size: 10px;
@@ -519,18 +519,18 @@ textarea {
   color: var(--text-3);
   opacity: 0;
   border-radius: 4px;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* 命中区向四周扩 5px */
+/* 命中区向四周扩 4px */
 .flow-item .del::after {
   content: '';
   position: absolute;
-  inset: -5px;
+  inset: -4px;
 }
 
 .flow-item:hover .del,
@@ -544,7 +544,7 @@ textarea {
 
 /* 新建下拉浮层（teleport 到 body，需全局样式） */
 .create-popover {
-  padding: 6px 10px !important;
+  padding: 8px 12px !important;
   border-radius: 12px !important;
 }
 
@@ -552,7 +552,7 @@ textarea {
 .home {
   flex: 1;
   overflow-y: auto;
-  padding: 49px 32px 32px;
+  padding: 48px 32px 32px;
 }
 
 .home-inner {
@@ -573,14 +573,14 @@ textarea {
 .hi {
   font-size: 16px;
   color: var(--text-2);
-  padding-left: 5px;
+  padding-left: 4px;
 }
 
 .hero-title {
   font-size: 24px;
   line-height: 1.5;
-  margin: 8px 0 33px;
-  padding-left: 5px;
+  margin: 8px 0 32px;
+  padding-left: 4px;
   font-weight: 500;
   letter-spacing: 0.2px;
 }
@@ -626,17 +626,17 @@ textarea {
   left: 0;
   top: 0;
   width: 100%;
-  height: 215px;
+  height: 216px;
   object-fit: cover;
   display: block;
 }
 
 .play-btn {
   position: absolute;
-  left: 25px;
-  top: 183px;
-  width: 31px;
-  height: 31px;
+  left: 24px;
+  top: 184px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: none;
   background: transparent;
@@ -659,7 +659,7 @@ textarea {
 
 .promo-body {
   flex: 1;
-  padding: 22px 24px 24px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
 }
@@ -672,14 +672,14 @@ textarea {
 .promo-title {
   font-size: 15px;
   font-weight: 500;
-  margin: 5px 0 16px;
+  margin: 4px 0 16px;
 }
 
 .promo-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 4px;
   width: 100%;
   height: 36px;
   padding: 0 12px;
@@ -698,7 +698,7 @@ textarea {
 }
 
 .hero-right {
-  width: 521px;
+  width: 520px;
   flex-shrink: 0;
 }
 
@@ -710,20 +710,20 @@ textarea {
 }
 
 .templates {
-  margin-top: 54px;
+  margin-top: 56px;
 }
 
 .templates-sub {
   font-size: 16px;
   color: var(--text-2);
-  padding-left: 5px;
+  padding-left: 4px;
 }
 
 .templates-title {
   font-size: 24px;
   font-weight: 500;
-  margin: 9px 0 36px;
-  padding-left: 5px;
+  margin: 8px 0 36px;
+  padding-left: 4px;
   letter-spacing: 0.2px;
   color: var(--text);
 }
@@ -731,7 +731,7 @@ textarea {
 .template-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 16px;
 }
 
 .template-card {
@@ -774,7 +774,7 @@ textarea {
 .tpl-desc {
   font-size: 13px;
   color: var(--text-3);
-  margin-top: 2px;
+  margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -849,7 +849,7 @@ textarea {
 }
 
 .page-sub {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   font-size: 13px;
   color: var(--text-2);
 }
@@ -877,8 +877,8 @@ textarea {
 .cat-group .el-radio-button:last-child .el-radio-button__inner {
   border: none;
   background: transparent;
-  border-radius: 6px;
-  padding: 6px 16px;
+  border-radius: 8px;
+  padding: 8px 16px;
   font-size: 13px;
   color: var(--text-2);
 }
@@ -892,102 +892,8 @@ textarea {
 .cat-group .el-radio-button__original-radio:checked + .el-radio-button__inner:hover {
   background: var(--accent);
   color: var(--el-color-white);
-  border-radius: 6px;
+  border-radius: 8px;
   box-shadow: none;
-}
-
-/* 列表行式快捷入口（帮助 / 工具页共用） */
-.quick-list {
-  display: flex;
-  flex-direction: column;
-  margin-top: 8px;
-}
-
-.quick-item {
-  --el-button-hover-bg-color: transparent;
-  --el-button-hover-text-color: var(--text);
-  --el-button-hover-border-color: transparent;
-  --el-button-active-bg-color: transparent;
-  --el-button-active-border-color: transparent;
-  --el-button-active-text-color: var(--text);
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  height: auto;
-  min-height: 48px;
-  padding: 8px 10px;
-  margin-left: 0;
-  border: none;
-  border-top: 1px solid var(--border);
-  border-radius: 0;
-  background: transparent;
-  text-align: left;
-  font-weight: 400;
-}
-
-.quick-item:first-child {
-  border-top: none;
-}
-
-.quick-item + .quick-item {
-  margin-left: 0;
-}
-
-.quick-item:hover {
-  background: var(--panel);
-}
-
-/* 图标 + 右侧箭头 */
-.quick-ico {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.quick-item:hover .quick-ico {
-  background: var(--accent);
-  color: var(--el-color-white);
-}
-
-.quick-texts {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.quick-arrow {
-  color: var(--text-3);
-  opacity: 0;
-  transform: translateX(-4px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
-  flex-shrink: 0;
-}
-
-.quick-item:hover .quick-arrow {
-  opacity: 1;
-  transform: translateX(0);
-  color: var(--accent);
-}
-
-.quick-label {
-  font-size: 13px;
-  color: var(--text);
-}
-
-.quick-desc {
-  font-size: 12px;
-  color: var(--text-3);
 }
 
 /* 详情页操作按钮行 */
@@ -1023,7 +929,7 @@ textarea {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 16px 18px;
+  padding: 16px;
   transition: box-shadow 0.15s ease;
 }
 
@@ -1037,7 +943,7 @@ textarea {
 }
 
 .stat-value {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 26px;
   font-weight: 500;
   color: var(--text);
@@ -1064,7 +970,7 @@ textarea {
 }
 
 .table td {
-  padding: 14px 16px;
+  padding: 16px;
   font-size: 13px;
   border-top: 1px solid var(--border);
   color: var(--text);
@@ -1085,11 +991,17 @@ textarea {
   gap: 16px;
 }
 
+/* 市场应用分页（与卡片网格同层） */
+.mkt-pagination {
+  margin-top: 16px;
+  justify-content: center;
+}
+
 .mkt-card {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 18px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   transition: box-shadow 0.15s ease, transform 0.15s ease;
@@ -1123,7 +1035,7 @@ textarea {
 }
 
 .mkt-desc {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 12px;
   color: var(--text-2);
   line-height: 1.6;
@@ -1142,7 +1054,7 @@ textarea {
 .mkt-cat {
   background: var(--panel);
   border-radius: 4px;
-  padding: 2px 6px;
+  padding: 0 8px;
 }
 
 .tut-card {
@@ -1161,7 +1073,7 @@ textarea {
 }
 
 .tut-cover {
-  height: 130px;
+  height: 128px;
   color: #fff;
   display: flex;
   align-items: center;
@@ -1171,16 +1083,16 @@ textarea {
 
 .tut-minutes {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
+  right: 8px;
+  bottom: 8px;
   background: rgba(0, 0, 0, 0.35);
   border-radius: 4px;
-  padding: 2px 6px;
+  padding: 0 8px;
   font-size: 11px;
 }
 
 .tut-body {
-  padding: 14px 16px 16px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -1194,7 +1106,7 @@ textarea {
 }
 
 .tut-desc {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 12px;
   color: var(--text-2);
   line-height: 1.6;
@@ -1252,7 +1164,7 @@ textarea {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 18px 20px;
+  padding: 16px 20px;
   transition: box-shadow 0.15s ease;
 }
 
@@ -1265,7 +1177,7 @@ textarea {
   font-size: 15px;
   font-weight: 600;
   color: var(--text);
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .sec-card-head {
@@ -1345,20 +1257,20 @@ textarea {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .step {
   display: grid;
   grid-template-columns: auto 1fr;
-  column-gap: 10px;
+  column-gap: 8px;
   align-items: center;
 }
 
 .step-no {
   grid-row: 1 / span 2;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: var(--accent);
   color: var(--el-color-white);
@@ -1376,7 +1288,7 @@ textarea {
 }
 
 .step-desc {
-  margin-top: 2px;
+  margin-top: 4px;
   font-size: 12px;
   color: var(--text-3);
   line-height: 1.6;
@@ -1386,7 +1298,7 @@ textarea {
 .var-chip {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   max-width: 100%;
   vertical-align: baseline;
   background: var(--var-bg);
@@ -1394,7 +1306,7 @@ textarea {
   border: 1px solid var(--var-border);
   border-radius: 4px;
   padding: 0 4px;
-  margin: 0 1px;
+  margin: 0 2px;
   font-size: 11px;
   line-height: 16px;
   white-space: nowrap;

@@ -4,12 +4,7 @@
 
 **一个软件，把你从重复劳动里解放出来。纯本机运行，数据不出你的电脑。**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-red?style=for-the-badge)](./LICENSE)
-[![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?style=for-the-badge&logo=vuedotjs&logoColor=white)](https://vuejs.org)
-[![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?style=for-the-badge&logo=tauri&logoColor=000)](https://tauri.app)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Element Plus](https://img.shields.io/badge/Element%20Plus-2-409EFF?style=for-the-badge&logo=elementplus&logoColor=white)](https://element-plus.org)
-[![Platform-Windows](https://img.shields.io/badge/Platform-Windows-eeeeee?style=for-the-badge)](#系统要求)
+[![License: MIT](https://img.shields.io/badge/License-MIT-red?style=for-the-badge)](./LICENSE) [![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?style=for-the-badge&logo=vuedotjs&logoColor=white)](https://vuejs.org) [![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?style=for-the-badge&logo=tauri&logoColor=000)](https://tauri.app) [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org) [![Element Plus](https://img.shields.io/badge/Element%20Plus-2-409EFF?style=for-the-badge&logo=elementplus&logoColor=white)](https://element-plus.org) [![Platform-Windows](https://img.shields.io/badge/Platform-Windows-eeeeee?style=for-the-badge)](#系统要求)
 
 </div>
 
@@ -115,6 +110,47 @@ scripts/setup-python.mjs
 ```
 
 > 插件未连接时，打开网页会自动拉起 Chrome；仍失败则回退到系统浏览器。详见 [plugin/README.md](plugin/README.md)。
+
+## 服务端部署（Docker 一键部署）
+
+服务端由三个容器组成：`mysql:8.0`（数据库，不暴露端口）、`leaf-rpa-backend`（Spring Boot，不暴露端口）、`leaf-rpa-frontend`（nginx，唯一入口 80/443，`/api/` 前缀反代后端）。镜像已发布到 Docker Hub：`yangshengzhou/leafrpa:backend-v1`、`yangshengzhou/leafrpa:frontend-v1`。
+
+**前置条件**：一台装好 Docker（含 compose 插件）的 Linux 服务器，无需其他环境。
+
+```bash
+# 1. 获取编排文件（三样：docker-compose.yml / sql/init-db.sql / deploy-server.sh，目录结构需保持 service/ 原样）
+git clone https://gitee.com/Yangshengzhou/leaf-rpa.git
+cd leaf-rpa/service
+
+# 2.（生产必须）写入 JWT 密钥
+echo 'LEAF_JWT_SECRET=<强随机值，至少32字节>' > .env
+
+# 3. 一键部署：自动建 docker 网络 → 拉镜像 → 起容器 → 健康检查
+bash deploy-server.sh
+```
+
+完成后访问 `http://<服务器IP>/` 即可，桌面客户端默认连接 `http://<服务器IP>`（可在客户端设置中修改，或构建时用 `VITE_SERVER_BASE` 指定）。
+
+**常用运维命令**（均在 `service/` 目录执行）：
+
+| 命令 | 说明 |
+| --- | --- |
+| `bash deploy-server.sh` | 部署 / 更新到最新镜像（幂等，数据不丢） |
+| `docker compose ps` / `logs -f` | 查看状态 / 日志 |
+| `docker compose pull && docker compose up -d` | 手动更新镜像 |
+| `docker compose down` | 停止（数据卷保留） |
+| `docker compose down -v` | 停止并清空数据库数据（慎用） |
+
+**升级版本**：镜像 tag 升级（如 `backend-v1` → `backend-v2`）后修改 `docker-compose.yml` 中的 `image:` 行，重新执行 `bash deploy-server.sh` 即可；旧镜像保留可随时回滚。
+
+**发布新镜像**（开发者，本机执行）：
+
+```bash
+cd service
+docker compose build backend frontend
+docker push yangshengzhou/leafrpa:backend-v1
+docker push yangshengzhou/leafrpa:frontend-v1
+```
 
 ## 快速开始
 

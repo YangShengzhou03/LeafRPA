@@ -11,3 +11,11 @@ python-runtime/*
 !python-runtime/README.md
 
 __pycache__/
+
+# 服务端：便携运行时、本地产物、构建输出
+service/backend/.runtime/
+service/backend/data/
+service/backend/target/
+service/backend/.idea/
+service/frontend/.idea/
+# 注意：node_modules / dist 已由上方全局规则覆盖（service/frontend 也命中）

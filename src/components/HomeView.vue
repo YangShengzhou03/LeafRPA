@@ -4,20 +4,21 @@ import { Pointer, MagicStick, Memo, Iphone, Picture, Clock, VideoPlay, Trophy } 
 import collageImg from '../assets/collage.png'
 import mascotImg from '../assets/mascot.png'
 import ringImg from '../assets/ring.png'
+import { t, type MessageKey } from '../i18n'
 
 const store = useAppStore()
 
-const templates = [
-  { key: 'web', name: '网页自动化', desc: '打开网页、点击、填表、抓取数据', icon: Pointer, cls: 't1', type: 'pc' as const },
-  { key: 'desktop', name: '桌面自动化', desc: '操作本地软件、模拟输入、图像识别', icon: MagicStick, cls: 't2', type: 'pc' as const },
-  { key: 'data', name: '数据处理', desc: 'Excel、JSON、文本处理与变量计算', icon: Memo, cls: 't3', type: 'pc' as const },
-  { key: 'mobile', name: '手机自动化', desc: '连接移动设备执行点击与滑动', icon: Iphone, cls: 't4', type: 'mobile' as const },
-  { key: 'excel', name: 'Excel 处理', desc: '读写表格、批量处理与汇总', icon: Picture, cls: 't5', type: 'pc' as const },
-  { key: 'schedule', name: '定时任务', desc: '按计划自动执行流程', icon: Clock, cls: 't6', type: 'pc' as const },
+const templates: { key: string; name: MessageKey; desc: MessageKey; icon: any; cls: string; type: 'pc' | 'mobile' }[] = [
+  { key: 'web', name: 'home.tpl.web.name', desc: 'home.tpl.web.desc', icon: Pointer, cls: 't1', type: 'pc' },
+  { key: 'desktop', name: 'home.tpl.desktop.name', desc: 'home.tpl.desktop.desc', icon: MagicStick, cls: 't2', type: 'pc' },
+  { key: 'data', name: 'home.tpl.data.name', desc: 'home.tpl.data.desc', icon: Memo, cls: 't3', type: 'pc' },
+  { key: 'mobile', name: 'home.tpl.mobile.name', desc: 'home.tpl.mobile.desc', icon: Iphone, cls: 't4', type: 'mobile' },
+  { key: 'excel', name: 'home.tpl.excel.name', desc: 'home.tpl.excel.desc', icon: Picture, cls: 't5', type: 'pc' },
+  { key: 'schedule', name: 'home.tpl.schedule.name', desc: 'home.tpl.schedule.desc', icon: Clock, cls: 't6', type: 'pc' },
 ]
 
-const openTemplate = (tpl: { name: string; type: 'pc' | 'mobile' }) => {
-  store.createAndOpen(tpl.name, tpl.type)
+const openTemplate = (tpl: { name: MessageKey; type: 'pc' | 'mobile' }) => {
+  store.createAndOpen(t(tpl.name), tpl.type)
 }
 
 const goTutorial = () => {
@@ -30,42 +31,42 @@ const goTutorial = () => {
     <div class="home-inner">
       <div class="hero">
         <div class="hero-left">
-          <div class="hi">Hi~ 欢迎使用轻羽 RPA</div>
+          <div class="hi">{{ t('home.greeting') }}</div>
           <h1 class="hero-title">
-            我们不担心机器像人一样聪明，<br />
-            但怕人像机器一样工作。
+            {{ t('home.heroTitle1') }}<br />
+            {{ t('home.heroTitle2') }}
           </h1>
 
           <div class="promo-cards">
             <div class="promo-card promo-a">
               <div class="promo-media">
-                <img class="ring-img" :src="ringImg" alt="轻羽RPA" />
-                <el-tooltip content="了解轻羽" placement="top" :show-after="300">
+                <img class="ring-img" :src="ringImg" :alt="t('app.name')" />
+                <el-tooltip :content="t('home.knowTip')" placement="top" :show-after="300">
                   <button class="play-btn" @click="goTutorial">
                     <el-icon :size="11" color="#fff"><VideoPlay /></el-icon>
                   </button>
                 </el-tooltip>
               </div>
               <div class="promo-body">
-                <div class="promo-sub">人不应该像机器一样工作</div>
-                <div class="promo-title">把枯燥的事情交给轻羽</div>
+                <div class="promo-sub">{{ t('home.promoAsub') }}</div>
+                <div class="promo-title">{{ t('home.promoAtitle') }}</div>
                 <button class="promo-btn" @click="goTutorial">
                   <el-icon :size="13"><VideoPlay /></el-icon>
-                  3分钟了解轻羽
+                  {{ t('home.promoAbtn') }}
                 </button>
               </div>
             </div>
 
             <div class="promo-card promo-b">
               <div class="promo-media">
-                <img class="mascot-img" :src="mascotImg" alt="轻羽机器人" />
+                <img class="mascot-img" :src="mascotImg" :alt="t('home.botAlt')" />
               </div>
               <div class="promo-body">
-                <div class="promo-sub">成为轻羽「RPA开发专家」</div>
-                <div class="promo-title">玩着学轻羽，改变自己</div>
+                <div class="promo-sub">{{ t('home.promoBsub') }}</div>
+                <div class="promo-title">{{ t('home.promoBtitle') }}</div>
                 <button class="promo-btn" @click="goTutorial">
                   <el-icon :size="13"><Trophy /></el-icon>
-                  开始闯关学习
+                  {{ t('home.promoBbtn') }}
                 </button>
               </div>
             </div>
@@ -73,13 +74,13 @@ const goTutorial = () => {
         </div>
 
         <div class="hero-right">
-          <img class="collage-img" :src="collageImg" alt="用户故事" />
+          <img class="collage-img" :src="collageImg" :alt="t('home.storiesAlt')" />
         </div>
       </div>
 
       <div class="templates">
-        <div class="templates-sub">自动化触手可及</div>
-        <h2 class="templates-title">让人生的美好在这里开始</h2>
+        <div class="templates-sub">{{ t('home.templatesSub') }}</div>
+        <h2 class="templates-title">{{ t('home.templatesTitle') }}</h2>
         <div class="template-row">
           <div
             v-for="tpl in templates"
@@ -92,8 +93,8 @@ const goTutorial = () => {
             @keydown.enter="openTemplate(tpl)"
           >
             <div class="tpl-icon"><el-icon :size="24"><component :is="tpl.icon" /></el-icon></div>
-            <div class="tpl-name">{{ tpl.name }}</div>
-            <div class="tpl-desc">{{ tpl.desc }}</div>
+            <div class="tpl-name">{{ t(tpl.name) }}</div>
+            <div class="tpl-desc">{{ t(tpl.desc) }}</div>
           </div>
         </div>
       </div>

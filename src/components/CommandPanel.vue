@@ -4,6 +4,7 @@ import { CaretBottom, CaretRight, Search } from '@element-plus/icons-vue'
 import { COMMAND_CATEGORIES, COMMANDS } from '../commands'
 import { useAppStore } from '../store'
 import { toastSuccess } from '../notify'
+import { t, type MessageKey } from '../i18n'
 import type { CommandDefinition } from '../types'
 
 const store = useAppStore()
@@ -14,34 +15,34 @@ const expanded = ref<string | null>(null)
 
 interface Group {
   key: string
-  label: string
+  label: MessageKey
   /** 对应 COMMANDS 的分类；未映射的分类点击时提示敬请期待 */
   cat?: string
   /** 展开后的空态文案（收藏 / 自定义指令） */
-  empty?: string
-  badge?: string
+  empty?: MessageKey
+  badge?: MessageKey
 }
 
 const GROUPS: Group[] = [
-  { key: 'fav', label: '我的收藏指令', empty: '暂无收藏指令' },
-  { key: 'custom', label: '已启用的自定义指令', empty: '暂无自定义指令' },
-  { key: 'basic', label: '基础指令', badge: '推荐' },
-  { key: 'if', label: '条件判断', cat: '控制流' },
-  { key: 'loop', label: '循环', cat: '控制流' },
-  { key: 'wait', label: '等待', cat: '等待与录屏' },
-  { key: 'mouse', label: '鼠标元素操作' },
-  { key: 'ai', label: 'AI 工具' },
-  { key: 'web', label: '网页自动化', cat: '网页自动化' },
-  { key: 'desktop', label: '桌面软件自动化', cat: '桌面自动化' },
-  { key: 'keyboard', label: '键盘输入' },
-  { key: 'grid', label: '数据表格' },
-  { key: 'excel', label: 'Excel/WPS表格' },
-  { key: 'file', label: '文件处理' },
-  { key: 'data', label: '数据处理', cat: '数据处理' },
-  { key: 'os', label: 'OS 操作' },
-  { key: 'browse', label: '浏览应用' },
-  { key: 'net', label: '网络', cat: '网络与通知' },
-  { key: 'other', label: '其他' },
+  { key: 'fav', label: 'designer.groupFav', empty: 'designer.noFav' },
+  { key: 'custom', label: 'designer.groupCustom', empty: 'designer.noCustom' },
+  { key: 'basic', label: 'designer.groupBasic', badge: 'designer.badgeRecommended' },
+  { key: 'if', label: 'designer.groupIf', cat: '控制流' },
+  { key: 'loop', label: 'designer.groupLoop', cat: '控制流' },
+  { key: 'wait', label: 'designer.groupWait', cat: '等待与录屏' },
+  { key: 'mouse', label: 'designer.groupMouse' },
+  { key: 'ai', label: 'designer.groupAi' },
+  { key: 'web', label: 'designer.groupWeb', cat: '网页自动化' },
+  { key: 'desktop', label: 'designer.groupDesktop', cat: '桌面自动化' },
+  { key: 'keyboard', label: 'designer.groupKeyboard' },
+  { key: 'grid', label: 'designer.tabTable' },
+  { key: 'excel', label: 'designer.groupExcel' },
+  { key: 'file', label: 'designer.groupFile' },
+  { key: 'data', label: 'designer.groupData', cat: '数据处理' },
+  { key: 'os', label: 'designer.groupOs' },
+  { key: 'browse', label: 'designer.groupBrowse' },
+  { key: 'net', label: 'designer.groupNet', cat: '网络与通知' },
+  { key: 'other', label: 'designer.groupOther' },
 ]
 
 function groupCommands(g: Group): CommandDefinition[] {
@@ -70,7 +71,7 @@ function toggleGroup(g: Group) {
 function addCommand(type: string) {
   store.addNode(type, 120, 120)
   const def = COMMANDS.find((c) => c.type === type)
-  toastSuccess(`已添加「${def?.name ?? type}」`, { title: '指令已添加', duration: 1800 })
+  toastSuccess(t('designer.addedCmd', { name: def?.name ?? type }), { title: t('designer.cmdAdded'), duration: 1800 })
 }
 </script>
 
@@ -78,24 +79,24 @@ function addCommand(type: string) {
   <aside class="cmd-panel">
     <div class="cmd-head">
       <div class="cmd-title-row">
-        <span class="cmd-title">指令</span>
+        <span class="cmd-title">{{ t('designer.commands') }}</span>
         <div class="cmd-search">
-          <el-input v-model="keyword" placeholder="搜索指令" clearable :prefix-icon="Search" />
+          <el-input v-model="keyword" :placeholder="t('designer.searchCommands')" clearable :prefix-icon="Search" />
         </div>
       </div>
       <div class="cmd-tabs">
-        <button :class="{ active: activeTab === 'standard' }" @click="activeTab = 'standard'">标准指令</button>
-        <button :class="{ active: activeTab === 'custom' }" @click="activeTab = 'custom'">自定义指令</button>
+        <button :class="{ active: activeTab === 'standard' }" @click="activeTab = 'standard'">{{ t('designer.standardCmds') }}</button>
+        <button :class="{ active: activeTab === 'custom' }" @click="activeTab = 'custom'">{{ t('designer.customCmds') }}</button>
       </div>
     </div>
 
     <div class="cmd-body">
       <template v-if="activeTab === 'custom'">
-        <div class="cmd-hint">暂无自定义指令</div>
+        <div class="cmd-hint">{{ t('designer.noCustom') }}</div>
       </template>
 
       <template v-else-if="searching">
-        <div v-if="!searchResults.length" class="cmd-hint">没有匹配的指令</div>
+        <div v-if="!searchResults.length" class="cmd-hint">{{ t('designer.noMatchCmd') }}</div>
         <button
           v-for="cmd in searchResults"
           :key="cmd.type"
@@ -116,11 +117,11 @@ function addCommand(type: string) {
               <CaretBottom v-if="expanded === g.key" />
               <CaretRight v-else />
             </el-icon>
-            <span class="group-name">{{ g.label }}</span>
-            <span v-if="g.badge" class="badge">{{ g.badge }}</span>
+            <span class="group-name">{{ t(g.label) }}</span>
+            <span v-if="g.badge" class="badge">{{ t(g.badge) }}</span>
           </button>
           <div v-if="expanded === g.key" class="group-body">
-            <div v-if="g.empty" class="cmd-hint">{{ g.empty }}</div>
+            <div v-if="g.empty" class="cmd-hint">{{ t(g.empty) }}</div>
             <template v-else-if="g.key === 'basic'">
               <template v-for="cat in COMMAND_CATEGORIES" :key="cat">
                 <div class="sub-cat">{{ cat }}</div>
@@ -170,7 +171,7 @@ function addCommand(type: string) {
 }
 
 .cmd-head {
-  padding: 10px 12px 10px;
+  padding: 12px;
   flex-shrink: 0;
 }
 
@@ -205,9 +206,9 @@ function addCommand(type: string) {
 
 .cmd-tabs {
   display: flex;
-  gap: 2px;
-  margin-top: 10px;
-  padding: 2px;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 4px;
   border-radius: 8px;
   background: var(--panel);
 }
@@ -217,7 +218,7 @@ function addCommand(type: string) {
   border: none;
   background: transparent;
   height: 28px;
-  border-radius: 6px;
+  border-radius: 4px;
   font-size: 13px;
   color: var(--text-2);
 }
@@ -236,19 +237,19 @@ function addCommand(type: string) {
 .cmd-body {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 0 20px;
+  padding: 8px 0 20px;
 }
 
 .cmd-group + .cmd-group {
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 .group-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  padding: 7px 12px;
+  padding: 8px 12px;
   border: none;
   background: transparent;
   text-align: left;
@@ -275,7 +276,7 @@ function addCommand(type: string) {
 .badge {
   font-size: 10px;
   line-height: 16px;
-  padding: 0 5px;
+  padding: 0 4px;
   border-radius: 4px;
   background: var(--accent-soft);
   color: var(--accent);
@@ -283,11 +284,11 @@ function addCommand(type: string) {
 }
 
 .group-body {
-  padding: 2px 0 6px;
+  padding: 4px 0 8px;
 }
 
 .sub-cat {
-  padding: 8px 12px 4px 30px;
+  padding: 8px 12px 4px 32px;
   font-size: 12px;
   color: var(--text-3);
 }
@@ -297,7 +298,7 @@ function addCommand(type: string) {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 12px 7px 30px;
+  padding: 8px 12px 8px 32px;
   border: none;
   background: transparent;
   text-align: left;

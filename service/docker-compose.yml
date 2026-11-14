@@ -1,0 +1,72 @@
+# 轻羽 RPA 服务端编排（生产拓扑 · 镜像部署）
+# 仅前端 nginx 暴露 80/443；API 由 nginx 按前缀 /api/ 反代到 backend；
+# backend / mysql 不映射宿主机端口，仅容器内网互通。
+# 部署方式：docker network create leaf-rpa-net → docker compose pull → docker compose up -d
+# 镜像来源：Docker Hub（yangshengzhou/leafrpa），本地构建推镜像见 README。
+name: leaf-rpa
+
+# 外部预建网络：先执行 docker network create leaf-rpa-net
+networks:
+  leaf-rpa-net:
+    external: true
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: leaf-rpa-mysql
+    networks:
+      - leaf-rpa-net
+    environment:
+      MYSQL_ROOT_PASSWORD: leaf_root_dev
+      TZ: Asia/Shanghai
+    # 不暴露宿主机端口：仅 backend 通过容器网络（服务名 mysql:3306）连接
+    volumes:
+      # 表结构唯一入口：首次启动自动执行（脚本幂等，可安全重跑）
+      - ./sql/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pleaf_root_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    image: yangshengzhou/leafrpa:backend-v1
+    container_name: leaf-rpa-backend
+    networks:
+      - leaf-rpa-net
+    environment:
+      # 容器网络内连 mysql 服务名；注意 init-db.sql 建的是 'leaf'@'%'，容器网段可用
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/leaf_rpa?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: leaf
+      SPRING_DATASOURCE_PASSWORD: leaf_rpa_dev
+      # 生产部署必须通过 .env 或环境变量提供强随机密钥（>= 32 字节），
+      # 缺省回落到开发密钥时后端启动会打告警日志
+      LEAF_JWT_SECRET: ${LEAF_JWT_SECRET:-leaf-rpa-dev-secret-please-override-in-production-0123456789}
+      LEAF_FLOW_DIR: /app/data/flows
+      TZ: Asia/Shanghai
+    # 不暴露宿主机端口：统一由前端 nginx 的 /api/ 前缀转发进入
+    volumes:
+      - flow-files:/app/data/flows
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    image: yangshengzhou/leafrpa:frontend-v1
+    container_name: leaf-rpa-frontend
+    networks:
+      - leaf-rpa-net
+    # 生产唯一入口：80（HTTP）+ 443（HTTPS，证书就绪后在 nginx.conf 增加 TLS 监听即可）
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+  flow-files:

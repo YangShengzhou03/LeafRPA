@@ -1,108 +1,92 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import { copyText } from '../clipboard'
 import { toastSuccess, toastWarning } from '../notify'
+import { t } from '../i18n'
+import { useAuthStore } from '../auth'
 import PageShell from '../components/PageShell.vue'
 
-const INVITE_CODE = 'QYRPA-2026-LEAF'
+const auth = useAuthStore()
 const REPO_URL = 'https://gitee.com/Yangshengzhou/leaf-rpa'
 
-interface InviteRecord {
-  name: string
-  time: number
-  rewarded: boolean
-}
-
-const STORAGE_KEY = 'leaf-rpa.invites'
-const records = ref<InviteRecord[]>([])
-
-onMounted(() => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) records.value = JSON.parse(raw) as InviteRecord[]
-  } catch {
-    records.value = []
-  }
-})
-
-function persist() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records.value))
-}
-
-const inviteLink = computed(() => `${REPO_URL}?invite=${INVITE_CODE}`)
-const shareText = computed(
-  () =>
-    `我在用轻羽 RPA 做自动化，输入邀请码 ${INVITE_CODE} 注册，我们都能获得额外的运行时长奖励。`,
+/* 邀请码即当前登录用户名；未登录时为空，页面展示登录提示 */
+const inviteCode = computed(() => auth.session?.username ?? '')
+const inviteLink = computed(() =>
+  inviteCode.value ? `${REPO_URL}?invite=${inviteCode.value}` : '',
+)
+const shareText = computed(() =>
+  inviteCode.value ? t('invite.shareText', { code: inviteCode.value }) : '',
 )
 
-const rewardSteps = [
-  { title: '分享邀请码', desc: '把邀请码或邀请链接发给朋友' },
-  { title: '好友注册并完成一次运行', desc: '好友使用邀请码注册，并成功运行任意流程' },
-  { title: '双方获得奖励', desc: '奖励会自动发放到双方账号的运行额度中' },
-]
+const rewardSteps = computed(() => [
+  { title: t('invite.step1Title'), desc: t('invite.step1Desc') },
+  { title: t('invite.step2Title'), desc: t('invite.step2Desc') },
+  { title: t('invite.step3Title'), desc: t('invite.step3Desc') },
+])
 
 async function copyCode() {
-  if (await copyText(INVITE_CODE)) toastSuccess('邀请码已复制')
-  else toastWarning('复制失败，请手动复制')
+  if (!inviteCode.value) {
+    toastWarning(t('invite.loginFirstCode'))
+    return
+  }
+  if (await copyText(inviteCode.value)) toastSuccess(t('invite.copiedCode'))
+  else toastWarning(t('common.copyFailed'))
 }
 
 async function copyLink() {
-  if (await copyText(inviteLink.value)) toastSuccess('邀请链接已复制')
-  else toastWarning('复制失败，请手动复制')
+  if (!inviteLink.value) {
+    toastWarning(t('invite.loginFirstLink'))
+    return
+  }
+  if (await copyText(inviteLink.value)) toastSuccess(t('invite.copiedLink'))
+  else toastWarning(t('common.copyFailed'))
 }
 
 async function copyShareText() {
-  if (await copyText(shareText.value)) toastSuccess('分享文案已复制')
-  else toastWarning('复制失败，请手动复制')
-}
-
-function addRecord() {
-  const name = `好友 ${records.value.length + 1}`
-  records.value.unshift({ name, time: Date.now(), rewarded: false })
-  persist()
-  toastSuccess('已记录一次邀请，奖励将在好友完成运行后发放')
-}
-
-function removeRecord(index: number) {
-  records.value.splice(index, 1)
-  persist()
-}
-
-function formatTime(t: number) {
-  return new Date(t).toLocaleString('zh-CN', { hour12: false })
+  if (!shareText.value) {
+    toastWarning(t('invite.loginFirstShare'))
+    return
+  }
+  if (await copyText(shareText.value)) toastSuccess(t('invite.copiedShare'))
+  else toastWarning(t('common.copyFailed'))
 }
 </script>
 
 <template>
-  <PageShell title="邀请好友" kicker="邀请有礼" sub="分享邀请码，与朋友一起体验自动化的乐趣">
+  <PageShell :title="t('invite.title')" :kicker="t('invite.kicker')" :sub="t('invite.sub')">
     <div class="invite-layout">
       <div class="invite-main">
         <section class="sec-card">
-          <h2 class="sec-title">我的邀请码</h2>
-          <div class="code-box">
-            <span class="code-text">{{ INVITE_CODE }}</span>
-            <el-button type="primary" plain @click="copyCode">复制邀请码</el-button>
-          </div>
-          <div class="link-box">
-            <span class="link-text" :title="inviteLink">{{ inviteLink }}</span>
-            <el-button link type="primary" @click="copyLink">复制链接</el-button>
-          </div>
-          <p class="sec-meta invite-tip">
-            邀请码仅在注册时可用一次。好友使用你的邀请码注册并完成首次运行后，
-            双方都会获得额外的运行额度奖励。
-          </p>
+          <h2 class="sec-title">{{ t('invite.myCode') }}</h2>
+          <template v-if="inviteCode">
+            <div class="code-box">
+              <span class="code-text">{{ inviteCode }}</span>
+              <el-button type="primary" plain @click="copyCode">{{ t('invite.copyCode') }}</el-button>
+            </div>
+            <div class="link-box">
+              <span class="link-text" :title="inviteLink">{{ inviteLink }}</span>
+              <el-button link type="primary" @click="copyLink">{{ t('invite.copyLink') }}</el-button>
+            </div>
+            <p class="sec-meta invite-tip">{{ t('invite.codeTip') }}</p>
+          </template>
+          <el-empty
+            v-else
+            :image-size="72"
+            :description="t('invite.emptyCode')"
+          />
         </section>
 
         <section class="sec-card">
-          <h2 class="sec-title">分享文案</h2>
-          <p class="share-text">{{ shareText }}</p>
-          <el-button plain @click="copyShareText">复制分享文案</el-button>
+          <h2 class="sec-title">{{ t('invite.shareTitle') }}</h2>
+          <p v-if="shareText" class="share-text">{{ shareText }}</p>
+          <p v-else class="sec-meta share-text">{{ t('invite.shareEmpty') }}</p>
+          <el-button plain :disabled="!shareText" @click="copyShareText">{{ t('invite.copyShare') }}</el-button>
         </section>
       </div>
 
       <aside class="invite-side">
         <section class="sec-card">
-          <h2 class="sec-title">奖励规则</h2>
+          <h2 class="sec-title">{{ t('invite.rulesTitle') }}</h2>
           <ol class="steps">
             <li v-for="(s, i) in rewardSteps" :key="s.title" class="step">
               <span class="step-no">{{ i + 1 }}</span>
@@ -114,27 +98,10 @@ function formatTime(t: number) {
 
         <section class="sec-card">
           <div class="sec-card-head">
-            <h2 class="sec-title">邀请记录</h2>
-            <span class="sec-meta">{{ records.length }} 条</span>
+            <h2 class="sec-title">{{ t('invite.recordsTitle') }}</h2>
           </div>
-          <el-empty v-if="!records.length" description="还没有邀请记录" :image-size="72" />
-          <ul v-else class="record-list">
-            <li v-for="(r, i) in records" :key="`${r.time}-${i}`" class="record-item">
-              <div class="record-body">
-                <div class="record-name">{{ r.name }}</div>
-                <div class="sec-meta">{{ formatTime(r.time) }}</div>
-              </div>
-              <el-tag :type="r.rewarded ? 'success' : 'info'" effect="plain">
-                {{ r.rewarded ? '已奖励' : '待完成' }}
-              </el-tag>
-              <el-tooltip content="移除记录" placement="top" :show-after="300">
-                <el-button class="row-x" text @click="removeRecord(i)">×</el-button>
-              </el-tooltip>
-            </li>
-          </ul>
-          <el-button class="record-add" plain @click="addRecord">
-            模拟一次邀请记录
-          </el-button>
+          <el-empty :description="t('invite.recordsEmpty')" :image-size="72" />
+          <p class="sec-meta record-tip">{{ t('invite.recordsTip') }}</p>
         </section>
       </aside>
     </div>
@@ -162,11 +129,11 @@ function formatTime(t: number) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 12px 16px;
   border: 1px dashed var(--border);
   border-radius: 8px;
   background: var(--panel);
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .code-text {
@@ -181,7 +148,7 @@ function formatTime(t: number) {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .link-text {
@@ -199,45 +166,14 @@ function formatTime(t: number) {
 }
 
 .share-text {
-  margin: 12px 0 14px;
+  margin: 12px 0 16px;
   font-size: 13px;
   color: var(--text-2);
   line-height: 1.7;
 }
 
-.record-list {
-  list-style: none;
-  margin: 0 0 12px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.record-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 56px;
-  padding: 8px 0;
-  border-top: 1px solid var(--border);
-}
-
-.record-item:first-child {
-  border-top: none;
-  margin-top: 4px;
-}
-
-.record-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.record-name {
-  font-size: 13px;
-  color: var(--text);
-}
-
-.record-add {
-  width: 100%;
+.record-tip {
+  margin: -8px 0 4px;
+  text-align: center;
 }
 </style>

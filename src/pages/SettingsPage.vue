@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { useAppStore, type ThemeMode } from '../store'
 import { useTriggerStore } from '../triggers'
@@ -7,16 +7,21 @@ import { installedApps } from '../installedApps'
 import { copyText } from '../clipboard'
 import { toastError, toastSuccess } from '../notify'
 import { i18n, setLocale, t, type Locale } from '../i18n'
+import { userApi, type UserProfileFull } from '../api'
+import { avatarSrcOrInitial } from '../avatar'
+import { useAuthStore } from '../auth'
 import type { CloseAction } from '../bridge'
 import PageShell from '../components/PageShell.vue'
 
 const store = useAppStore()
 const triggerStore = useTriggerStore()
+const auth = useAuthStore()
 const REPO_URL = 'https://gitee.com/Yangshengzhou/leaf-rpa'
 
-type SectionKey = 'general' | 'appearance' | 'data' | 'about' | 'danger'
+type SectionKey = 'account' | 'general' | 'appearance' | 'data' | 'about' | 'danger'
 
-const sectionLabels: Record<SectionKey, 'nav.general' | 'nav.appearance' | 'nav.data' | 'nav.about' | 'nav.danger'> = {
+const sectionLabels: Record<SectionKey, 'nav.account' | 'nav.general' | 'nav.appearance' | 'nav.data' | 'nav.about' | 'nav.danger'> = {
+  account: 'nav.account',
   general: 'nav.general',
   appearance: 'nav.appearance',
   data: 'nav.data',
@@ -42,8 +47,117 @@ const themes: { value: ThemeMode; label: 'theme.light' | 'theme.dark' | 'theme.s
   { value: 'system', label: 'theme.system' },
 ]
 
+/* ---------- 账号资料：读取 /api/users/me，编辑后保存 ---------- */
+
+const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+const AVATAR_URL_REGEX = /^https?:\/\/\S+$/
+
+const profile = ref<UserProfileFull | null>(null)
+const profileLoading = ref(false)
+const profileSaving = ref(false)
+/* 默认只读展示，点击「修改资料」后进入编辑态 */
+const profileEditing = ref(false)
+const nickname = ref('')
+const email = ref('')
+const gender = ref<UserProfileFull['gender']>('unknown')
+const signature = ref('')
+const avatarUrl = ref('')
+
+function applyProfile(p: UserProfileFull) {
+  profile.value = p
+  nickname.value = p.nickname ?? ''
+  email.value = p.email ?? ''
+  gender.value = p.gender
+  signature.value = p.signature ?? ''
+  avatarUrl.value = p.avatarUrl ?? ''
+}
+
+function startEdit() {
+  profileEditing.value = true
+}
+
+function cancelEdit() {
+  if (profile.value) applyProfile(profile.value)
+  profileEditing.value = false
+}
+
+async function loadProfile() {
+  profileLoading.value = true
+  try {
+    applyProfile(await userApi.me())
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : t('settings.account.loadFailed'))
+  } finally {
+    profileLoading.value = false
+  }
+}
+
+watch(
+  () => auth.isLoggedIn,
+  (loggedIn) => {
+    if (loggedIn) void loadProfile()
+    else profile.value = null
+  },
+  { immediate: false },
+)
+
+onMounted(() => {
+  if (auth.isLoggedIn) void loadProfile()
+})
+
+async function saveProfile() {
+  const mail = email.value.trim()
+  if (mail && !EMAIL_REGEX.test(mail)) {
+    toastError(t('settings.account.emailInvalid'))
+    return
+  }
+  const url = avatarUrl.value.trim()
+  if (url && !AVATAR_URL_REGEX.test(url)) {
+    toastError(t('settings.account.avatarInvalid'))
+    return
+  }
+  profileSaving.value = true
+  try {
+    const full = await userApi.updateMe({
+      nickname: nickname.value.trim(),
+      email: mail,
+      gender: gender.value,
+      signature: signature.value.trim(),
+      avatarUrl: url,
+    })
+    applyProfile(full)
+    // 同步顶栏 / 用户菜单展示（昵称、头像即时生效）
+    auth.syncProfile(full.nickname, full.avatarUrl)
+    profileEditing.value = false
+    toastSuccess(t('settings.account.saved'))
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : t('settings.account.loadFailed'))
+  } finally {
+    profileSaving.value = false
+  }
+}
+
+const phoneMasked = computed(() => profile.value?.phoneMasked ?? '--')
+
+/* 只读展示的性别文案 */
+const genderText = computed(() => t(`settings.gender.${profile.value?.gender ?? 'unknown'}`))
+
+/* 顶部头像：展示已保存的头像地址，加载失败时回退用户名首字 */
+const topAvatar = computed(() => avatarSrcOrInitial(profile.value?.avatarUrl, auth.session?.username))
+const topAvatarFailed = ref(false)
+watch(() => topAvatar.value.src, () => {
+  topAvatarFailed.value = false
+})
+
+/* 预览头像：跟随「头像地址」输入框实时变化 */
+const previewAvatar = computed(() => avatarSrcOrInitial(avatarUrl.value, auth.session?.username))
+const previewFailed = ref(false)
+watch(() => previewAvatar.value.src, () => {
+  previewFailed.value = false
+})
+
 /* ---------- 左侧锚点目录：点击滚动定位 + 滚动跟随高亮 ---------- */
-const active = ref<SectionKey>('general')
+const active = ref<SectionKey>('account')
 const rootEl = ref<HTMLElement | null>(null)
 const sectionEls = new Map<SectionKey, HTMLElement>()
 let scrollBox: HTMLElement | null = null
@@ -159,6 +273,173 @@ async function clearAll() {
       </nav>
 
       <div class="set-content">
+        <section :ref="setSectionRef('account')" class="sec-card set-section">
+          <h2 class="sec-title">{{ t('settings.nav.account') }}</h2>
+          <template v-if="!auth.isLoggedIn">
+            <p class="sec-meta account-empty">
+              {{ t('settings.account.notLoggedIn') }} · {{ t('settings.account.loginHint') }}
+            </p>
+          </template>
+          <template v-else>
+            <div class="account-top">
+              <span class="account-avatar">
+                <img
+                  v-if="topAvatar.src && !topAvatarFailed"
+                  :src="topAvatar.src"
+                  alt=""
+                  @error="topAvatarFailed = true"
+                />
+                <template v-else>{{ topAvatar.initial }}</template>
+              </span>
+              <div class="account-id">
+                <div class="account-name">{{ nickname || auth.session?.username }}</div>
+                <div class="sec-meta">{{ auth.session?.username }} · {{ phoneMasked }}</div>
+              </div>
+              <div class="account-actions">
+                <el-button v-if="profileEditing" @click="cancelEdit">
+                  {{ t('common.cancel') }}
+                </el-button>
+                <el-button
+                  v-if="profileEditing"
+                  type="primary"
+                  :loading="profileSaving"
+                  @click="saveProfile"
+                >
+                  {{ t('settings.account.save') }}
+                </el-button>
+                <el-button v-else type="primary" plain @click="startEdit">
+                  {{ t('settings.account.edit') }}
+                </el-button>
+              </div>
+            </div>
+            <div v-loading="profileLoading" class="account-form">
+              <div class="general-row">
+                <div class="general-info">
+                  <div class="general-label">{{ t('settings.account.phone') }}</div>
+                </div>
+                <span class="account-readonly">{{ phoneMasked }}</span>
+              </div>
+              <template v-if="!profileEditing">
+                <div class="general-row">
+                  <div class="general-info">
+                    <div class="general-label">{{ t('settings.account.nickname') }}</div>
+                  </div>
+                  <span class="account-readonly">{{ nickname || auth.session?.username }}</span>
+                </div>
+                <!-- 未设置的字段整行不展示，保持只读区简洁 -->
+                <div v-if="email" class="general-row">
+                  <div class="general-info">
+                    <div class="general-label">{{ t('settings.account.email') }}</div>
+                  </div>
+                  <span class="account-readonly">{{ email }}</span>
+                </div>
+                <div v-if="gender !== 'unknown'" class="general-row">
+                  <div class="general-info">
+                    <div class="general-label">{{ t('settings.account.gender') }}</div>
+                  </div>
+                  <span class="account-readonly">{{ genderText }}</span>
+                </div>
+                <div v-if="signature" class="general-row">
+                  <div class="general-info">
+                    <div class="general-label">{{ t('settings.account.signature') }}</div>
+                  </div>
+                  <span class="account-readonly">{{ signature }}</span>
+                </div>
+                <div v-if="avatarUrl" class="general-row">
+                  <div class="general-info">
+                    <div class="general-label">{{ t('settings.account.avatarUrl') }}</div>
+                  </div>
+                  <span class="account-readonly readonly-avatar">
+                    <span class="avatar-preview">
+                      <img
+                        v-if="topAvatar.src && !topAvatarFailed"
+                        :src="topAvatar.src"
+                        alt=""
+                        @error="topAvatarFailed = true"
+                      />
+                      <template v-else>{{ topAvatar.initial }}</template>
+                    </span>
+                    <span class="avatar-url-text">{{ avatarUrl }}</span>
+                  </span>
+                </div>
+              </template>
+              <template v-else>
+                <div class="general-row">
+                  <div class="general-info">
+                    <div class="general-label">{{ t('settings.account.nickname') }}</div>
+                    <p class="sec-meta">{{ t('settings.account.nicknameHint') }}</p>
+                  </div>
+                  <el-input
+                    v-model="nickname"
+                    class="account-input"
+                    :placeholder="t('settings.account.nicknamePlaceholder')"
+                    maxlength="32"
+                    clearable
+                  />
+                </div>
+                <div class="general-row">
+                  <div class="general-info">
+                    <div class="general-label">{{ t('settings.account.email') }}</div>
+                  </div>
+                  <el-input
+                    v-model="email"
+                    class="account-input"
+                    :placeholder="t('settings.account.emailPlaceholder')"
+                    maxlength="64"
+                    clearable
+                  />
+                </div>
+                <div class="general-row">
+                  <div class="general-info">
+                    <div class="general-label">{{ t('settings.account.gender') }}</div>
+                  </div>
+                  <el-radio-group v-model="gender">
+                    <el-radio value="unknown">{{ t('settings.gender.unknown') }}</el-radio>
+                    <el-radio value="male">{{ t('settings.gender.male') }}</el-radio>
+                    <el-radio value="female">{{ t('settings.gender.female') }}</el-radio>
+                  </el-radio-group>
+                </div>
+                <div class="general-row">
+                  <div class="general-info">
+                    <div class="general-label">{{ t('settings.account.signature') }}</div>
+                  </div>
+                  <el-input
+                    v-model="signature"
+                    class="account-input"
+                    :placeholder="t('settings.account.signaturePlaceholder')"
+                    maxlength="128"
+                    clearable
+                  />
+                </div>
+                <div class="general-row">
+                  <div class="general-info">
+                    <div class="general-label">{{ t('settings.account.avatarUrl') }}</div>
+                    <p class="sec-meta">{{ t('settings.account.avatarUrlHint') }}</p>
+                  </div>
+                  <div class="avatar-url-field">
+                    <span class="avatar-preview">
+                      <img
+                        v-if="previewAvatar.src && !previewFailed"
+                        :src="previewAvatar.src"
+                        alt=""
+                        @error="previewFailed = true"
+                      />
+                      <template v-else>{{ previewAvatar.initial }}</template>
+                    </span>
+                    <el-input
+                      v-model="avatarUrl"
+                      class="account-input"
+                      :placeholder="t('settings.account.avatarUrlPlaceholder')"
+                      maxlength="255"
+                      clearable
+                    />
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+        </section>
+
         <section :ref="setSectionRef('general')" class="sec-card set-section">
           <h2 class="sec-title">{{ t('settings.nav.general') }}</h2>
           <div class="general-row">
@@ -299,10 +580,10 @@ async function clearAll() {
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 9px 12px;
+  padding: 8px 12px;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
   color: var(--text-2);
   text-align: left;
@@ -331,13 +612,124 @@ async function clearAll() {
   scroll-margin-top: 16px;
 }
 
+/* 账号资料：头像 + 身份信息 + 保存按钮，下方为可编辑字段 */
+.account-empty {
+  margin: 12px 0 0;
+}
+
+.account-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+.account-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+  flex-shrink: 0;
+  overflow: hidden;
+  user-select: none;
+}
+
+.account-avatar img,
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.account-id {
+  flex: 1;
+  min-width: 0;
+}
+
+.account-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.account-form {
+  margin-top: 4px;
+  min-height: 60px;
+}
+
+.account-readonly {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.readonly-avatar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.readonly-avatar .avatar-url-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+
+.account-input {
+  width: 240px;
+  flex-shrink: 0;
+}
+
+/* 头像地址行：小预览图 + 输入框 */
+.avatar-url-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.avatar-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  flex-shrink: 0;
+  user-select: none;
+}
+
 /* 通用分区：左侧说明 + 右侧控件 */
 .general-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .general-row:first-of-type {
@@ -366,7 +758,7 @@ async function clearAll() {
 .set-dir {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -393,7 +785,7 @@ async function clearAll() {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .set-danger-body .sec-meta {

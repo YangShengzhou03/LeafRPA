@@ -24,16 +24,17 @@ import { useAppStore, type FlowIssue } from '../store'
 import { suggestName } from '../elements'
 import { pollPluginEvents, runWebCommand } from '../web-executor'
 import { toastError, toastSuccess, toastWarning } from '../notify'
+import { t, i18n, type MessageKey } from '../i18n'
 
 type ToolPanel = '' | 'export' | 'check' | 'selector' | 'capture' | 'subflow' | 'record'
 
-const PANEL_TITLES: Record<Exclude<ToolPanel, ''>, string> = {
-  export: '导出流程',
-  check: '流程检查',
-  selector: '选择器',
-  capture: '数据抓取',
-  subflow: '新建子流程',
-  record: '智能录制',
+const PANEL_TITLES: Record<Exclude<ToolPanel, ''>, MessageKey> = {
+  export: 'designer.panel.export',
+  check: 'designer.panel.check',
+  selector: 'designer.panel.selector',
+  capture: 'designer.panel.capture',
+  subflow: 'designer.panel.subflow',
+  record: 'designer.panel.record',
 }
 
 const store = useAppStore()
@@ -57,15 +58,17 @@ const rename = () => {
   store.renameFlow(trimmed)
 }
 
-const appNameChar = computed(() => (store.current?.name ?? '应').charAt(0) || '应')
+const appNameChar = computed(
+  () => (store.current?.name ?? t('designer.appInitial')).charAt(0) || t('designer.appInitial'),
+)
 const typeLabel = computed(() => {
-  const t = store.current?.type
-  return t === 'mobile' ? '手机应用' : t === 'instruction' ? '自定义指令' : 'PC 应用'
+  const ty = store.current?.type
+  return ty === 'mobile' ? t('designer.type.mobile') : ty === 'instruction' ? t('designer.type.instruction') : t('designer.type.pc')
 })
 
 /* ---------- 工具面板（抽屉） ---------- */
 const panel = ref<ToolPanel>('')
-const panelTitle = computed(() => (panel.value ? PANEL_TITLES[panel.value] : ''))
+const panelTitle = computed(() => (panel.value ? t(PANEL_TITLES[panel.value]) : ''))
 const panelOpen = computed({
   get: () => !!panel.value,
   set: (v: boolean) => {
@@ -98,7 +101,7 @@ function openSelector() {
 async function checkSelector() {
   const selector = selectorValue.value.trim()
   if (!selector) {
-    toastWarning('请输入元素选择器', { title: '选择器为空' })
+    toastWarning(t('designer.selectorRequired'), { title: t('designer.selectorEmpty') })
     return
   }
   selectorChecking.value = true
@@ -107,7 +110,7 @@ async function checkSelector() {
     selectorOk.value = true
   } catch (e) {
     selectorOk.value = false
-    toastError((e as Error).message, { title: '校验失败' })
+    toastError((e as Error).message, { title: t('designer.checkFail') })
   } finally {
     selectorChecking.value = false
   }
@@ -120,14 +123,14 @@ function insertSelector() {
   if (target && 'selector' in target.props) {
     target.props.selector = selector
     store.markDirty()
-    toastSuccess('已更新选中节点的选择器', { title: '选择器已应用' })
+    toastSuccess(t('designer.appliedToNode'), { title: t('designer.appliedTitle') })
   } else {
     const pos = nextNodePos()
     store.addNode('web.click', pos.x, pos.y)
     const created = store.selectedNode
     if (created) created.props.selector = selector
     store.markDirty()
-    toastSuccess('已插入「点击元素」节点', { title: '节点已插入' })
+    toastSuccess(t('designer.insertedClick'), { title: t('designer.insertedTitle') })
   }
   panel.value = ''
 }
@@ -135,11 +138,11 @@ function insertSelector() {
 /* ---------- 数据抓取 ---------- */
 type CaptureKind = 'text' | 'element' | 'related' | 'similar'
 
-const CAPTURE_TYPES: Record<CaptureKind, { label: string; type: string }> = {
-  text: { label: '获取文本', type: 'web.getText' },
-  element: { label: '获取元素对象', type: 'get-element-web' },
-  related: { label: '获取关联元素', type: 'get-related-web' },
-  similar: { label: '获取相似元素列表', type: 'get-similar-web' },
+const CAPTURE_TYPES: Record<CaptureKind, { label: MessageKey; type: string }> = {
+  text: { label: 'designer.cap.text', type: 'web.getText' },
+  element: { label: 'designer.cap.element', type: 'get-element-web' },
+  related: { label: 'designer.cap.related', type: 'get-related-web' },
+  similar: { label: 'designer.cap.similar', type: 'get-similar-web' },
 }
 
 const captureSelector = ref('')
@@ -158,7 +161,7 @@ function openCapture() {
 async function runCapture() {
   const selector = captureSelector.value.trim()
   if (!selector) {
-    toastWarning('请输入元素选择器', { title: '选择器为空' })
+    toastWarning(t('designer.selectorRequired'), { title: t('designer.selectorEmpty') })
     return
   }
   const meta = CAPTURE_TYPES[captureKind.value]
@@ -174,13 +177,13 @@ async function runCapture() {
       const created = store.selectedNode
       if (created) {
         created.props.selector = selector
-        created.name = meta.label
+        created.name = t(meta.label)
       }
       store.markDirty()
     }
-    toastSuccess('抓取完成，结果已保存到变量 __captured', { title: '抓取成功', duration: 2800 })
+    toastSuccess(t('designer.captureDoneMsg'), { title: t('designer.pickOk'), duration: 2800 })
   } catch (e) {
-    toastError((e as Error).message, { title: '抓取失败' })
+    toastError((e as Error).message, { title: t('designer.pickFail') })
   } finally {
     captureRunning.value = false
   }
@@ -197,21 +200,21 @@ function openSubflow() {
 async function confirmSubflow() {
   const name = subflowName.value.trim()
   if (!name) {
-    toastWarning('请输入子流程名称', { title: '名称为空' })
+    toastWarning(t('designer.subflowNameRequired'), { title: t('common.nameEmpty') })
     return
   }
   if (store.flows.some((f) => f.type === 'instruction' && f.name === name)) {
-    toastWarning('已存在同名子流程，请更换名称', { title: '名称重复' })
+    toastWarning(t('designer.subflowDup'), { title: t('designer.nameDup') })
     return
   }
   try {
     await store.createSubflow(name)
   } catch (e) {
-    toastError(e instanceof Error ? e.message : String(e), { title: '创建失败' })
+    toastError(e instanceof Error ? e.message : String(e), { title: t('designer.createFail') })
     return
   }
   panel.value = ''
-  toastSuccess(`子流程「${name}」已创建，并在流程末尾插入引用节点`, { title: '子流程已创建', duration: 3200 })
+  toastSuccess(t('designer.subflowCreated', { name }), { title: t('designer.subflowCreatedTitle'), duration: 3200 })
 }
 
 /* ---------- 智能录制 ---------- */
@@ -240,7 +243,7 @@ async function startRecord() {
     const { seq } = await pollPluginEvents(Number.MAX_SAFE_INTEGER)
     recordSince = seq
   } catch (e) {
-    toastError((e as Error).message, { title: '录制启动失败' })
+    toastError((e as Error).message, { title: t('designer.recordStartFail') })
     return
   }
   recording.value = true
@@ -253,13 +256,13 @@ async function pollRecord() {
     result = await pollPluginEvents(recordSince)
   } catch (e) {
     stopRecord()
-    toastError((e as Error).message, { title: '录制中断' })
+    toastError((e as Error).message, { title: t('designer.recordAbort') })
     return
   }
   recordSince = result.seq
   for (const ev of result.events) {
     const payload = (ev.payload ?? {}) as Record<string, unknown>
-    const tag = String(payload.tagName ?? '元素')
+    const tag = String(payload.tagName ?? t('designer.unknowTag'))
     const selector = String(payload.cssSelector ?? '')
     const text = String(payload.text ?? '').slice(0, 40)
     recordItems.value.push({ seq: ev.seq, tag, selector, text })
@@ -280,11 +283,11 @@ async function pollRecord() {
       url: String(payload.url ?? ''),
       title: String(payload.pageTitle ?? ''),
     })
-    store.appendNode('get-element-web', `元素 ${tag}`, {
+    store.appendNode('get-element-web', t('designer.nodeTag', { tag }), {
       selector,
       variable: el?.name ?? `el${recordItems.value.length}`,
     })
-    store.log('success', `智能录制采集：<${tag}> ${selector.slice(0, 60)}`)
+    store.log('success', `${t('designer.logRecord')}<${tag}> ${selector.slice(0, 60)}`)
   }
 }
 
@@ -318,15 +321,15 @@ function toggleDebug() {
 const onStop = () => {
   if (!store.running) return
   store.stopRequested = true
-  toastSuccess('已请求停止，将在当前节点结束后终止', { title: '停止请求已提交' })
+  toastSuccess(t('designer.stopRequested'), { title: t('designer.stopRequestedTitle') })
 }
 
 const saveState = computed(() => {
-  if (store.dirty) return '编辑中…'
+  if (store.dirty) return t('designer.editing')
   if (store.savedAt) {
-    return `已保存 ${new Date(store.savedAt).toLocaleTimeString('zh-CN', { hour12: false })}`
+    return t('designer.savedAt', { time: new Date(store.savedAt).toLocaleTimeString(i18n.locale, { hour12: false }) })
   }
-  return '未修改'
+  return t('designer.unchanged')
 })
 
 /* ---------- 导入 / 导出（入口在「更多」下拉） ---------- */
@@ -348,7 +351,7 @@ function downloadExport() {
   a.click()
   a.remove()
   URL.revokeObjectURL(url)
-  toastSuccess('流程文件已保存', { title: '导出完成', duration: 2000 })
+  toastSuccess(t('designer.exportDone'), { title: t('designer.exportDoneTitle'), duration: 2000 })
 }
 
 async function onImportFile(e: Event) {
@@ -360,7 +363,7 @@ async function onImportFile(e: Event) {
     const text = await file.text()
     await store.importFlow(text)
   } catch (err) {
-    toastError(err instanceof Error ? err.message : '导入失败', { title: '导入失败' })
+    toastError(err instanceof Error ? err.message : t('designer.importFail'), { title: t('designer.importFail') })
   }
 }
 
@@ -406,7 +409,7 @@ function onKeydown(e: KeyboardEvent) {
     if (!store.clipboard) return
     e.preventDefault()
     const node = store.pasteNode()
-    if (node) toastSuccess(`已粘贴「${node.name}」`)
+    if (node) toastSuccess(t('designer.pasted', { name: node.name }))
   } else if (key === '/') {
     // Ctrl+/ 注释步骤：复用「禁用」标记，运行与调试时都会被跳过
     if (!store.selectedNodeId) return
@@ -427,7 +430,7 @@ onBeforeUnmount(() => {
   <section v-if="store.current" class="designer">
     <header class="toolbar" data-tauri-drag-region>
       <div class="tb-left" data-tauri-drag-region>
-        <el-tooltip content="返回应用列表" placement="bottom" :show-after="300">
+        <el-tooltip :content="t('designer.backTooltip')" placement="bottom" :show-after="300">
           <el-button text circle @click="store.backHome()">
             <el-icon :size="16"><Back /></el-icon>
           </el-button>
@@ -436,17 +439,17 @@ onBeforeUnmount(() => {
         <el-input
           v-model="nameDraft"
           class="flow-name-input"
-          placeholder="输入应用名称"
+          :placeholder="t('designer.namePlaceholder')"
           @blur="rename"
           @keydown.enter="rename"
         />
         <el-tag type="info" effect="plain">{{ typeLabel }}</el-tag>
-        <el-tooltip content="撤销（Ctrl+Z）" placement="bottom" :show-after="300">
+        <el-tooltip :content="t('designer.undoTooltip')" placement="bottom" :show-after="300">
           <el-button text circle @click="store.undo()">
             <el-icon :size="15"><RefreshLeft /></el-icon>
           </el-button>
         </el-tooltip>
-        <el-tooltip content="重做（Ctrl+Y）" placement="bottom" :show-after="300">
+        <el-tooltip :content="t('designer.redoTooltip')" placement="bottom" :show-after="300">
           <el-button text circle @click="store.redo()">
             <el-icon :size="15"><RefreshRight /></el-icon>
           </el-button>
@@ -456,23 +459,23 @@ onBeforeUnmount(() => {
       <div class="tb-scroll" data-tauri-drag-region>
         <div class="tb-center" data-tauri-drag-region>
           <el-button text @click="openCapture">
-            <el-icon :size="14"><Download /></el-icon>&nbsp;数据抓取
+            <el-icon :size="14"><Download /></el-icon>&nbsp;{{ t('designer.panel.capture') }}
           </el-button>
           <el-button text @click="openSelector">
-            <el-icon :size="14"><Aim /></el-icon>&nbsp;选择器
+            <el-icon :size="14"><Aim /></el-icon>&nbsp;{{ t('designer.panel.selector') }}
           </el-button>
           <el-button text @click="openRecord">
-            <el-icon :size="14"><VideoCamera /></el-icon>&nbsp;智能录制
+            <el-icon :size="14"><VideoCamera /></el-icon>&nbsp;{{ t('designer.panel.record') }}
           </el-button>
           <el-button text @click="openSubflow">
-            <el-icon :size="14"><Files /></el-icon>&nbsp;新建子流程
+            <el-icon :size="14"><Files /></el-icon>&nbsp;{{ t('designer.panel.subflow') }}
           </el-button>
         </div>
       </div>
 
       <div class="tb-actions" data-tauri-drag-region>
         <el-tooltip
-          :content="store.running ? '停止运行' : '运行流程'"
+          :content="store.running ? t('designer.stopTooltip') : t('designer.runTooltip')"
           placement="bottom"
           :show-after="300"
         >
@@ -483,36 +486,36 @@ onBeforeUnmount(() => {
             <el-icon :size="14">
               <VideoPause v-if="store.running" />
               <VideoPlay v-else />
-            </el-icon>&nbsp;{{ store.running ? '停止' : '运行' }}
+            </el-icon>&nbsp;{{ store.running ? t('designer.stop') : t('designer.run') }}
           </el-button>
         </el-tooltip>
-        <el-tooltip content="单步调试" placement="bottom" :show-after="300">
+        <el-tooltip :content="t('designer.debugTooltip')" placement="bottom" :show-after="300">
           <el-button
             text
             :type="store.debugging ? 'primary' : 'default'"
             @click="toggleDebug"
           >
-            {{ store.debugging ? '调试中' : '调试' }}
+            {{ store.debugging ? t('designer.debugging') : t('designer.debug') }}
           </el-button>
         </el-tooltip>
       </div>
 
       <div class="tb-right" data-tauri-drag-region>
         <el-text type="info" class="save-state">{{ saveState }}</el-text>
-        <el-tooltip content="保存（Ctrl+S）" placement="bottom" :show-after="300">
+        <el-tooltip :content="t('designer.saveTooltip')" placement="bottom" :show-after="300">
           <el-button text @click="store.saveCurrent()">
-            <el-icon :size="14"><DocumentChecked /></el-icon>&nbsp;保存
+            <el-icon :size="14"><DocumentChecked /></el-icon>&nbsp;{{ t('designer.save') }}
           </el-button>
         </el-tooltip>
         <el-dropdown trigger="click" @command="onMenu">
-          <el-button text title="更多操作">
-            <el-icon :size="14"><MoreFilled /></el-icon>&nbsp;更多
+          <el-button text :title="t('steps.more')">
+            <el-icon :size="14"><MoreFilled /></el-icon>&nbsp;{{ t('designer.more') }}
           </el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="import">导入流程</el-dropdown-item>
-              <el-dropdown-item command="export">导出流程</el-dropdown-item>
-              <el-dropdown-item command="check">检查流程</el-dropdown-item>
+              <el-dropdown-item command="import">{{ t('designer.menuImport') }}</el-dropdown-item>
+              <el-dropdown-item command="export">{{ t('designer.panel.export') }}</el-dropdown-item>
+              <el-dropdown-item command="check">{{ t('designer.menuCheck') }}</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -522,12 +525,12 @@ onBeforeUnmount(() => {
 
     <div v-if="store.debugging" class="debug-bar">
       <span class="dbg-step">
-        单步调试 · 第 {{ Math.min(store.debugPos + 1, store.debugIds.length) }} / {{ store.debugIds.length }} 步
+        {{ t('designer.debugBar', { n: Math.min(store.debugPos + 1, store.debugIds.length), total: store.debugIds.length }) }}
       </span>
       <span v-if="currentDebugNode" class="dbg-name">{{ currentDebugNode.name }}</span>
       <div class="spacer"></div>
-      <el-button :disabled="store.running" @click="store.debugStep()">单步执行</el-button>
-      <el-button type="primary" plain @click="store.finishDebug()">结束调试</el-button>
+      <el-button :disabled="store.running" @click="store.debugStep()">{{ t('designer.debugStepBtn') }}</el-button>
+      <el-button type="primary" plain @click="store.finishDebug()">{{ t('designer.debugEnd') }}</el-button>
     </div>
 
     <div class="designer-body">
@@ -537,8 +540,8 @@ onBeforeUnmount(() => {
 
           <div class="flow-card">
             <div class="flow-tabbar">
-              <div class="flow-tab active">主流程.flow</div>
-              <el-tooltip content="新建子流程" placement="bottom" :show-after="300">
+              <div class="flow-tab active">{{ t('designer.mainFlow') }}</div>
+              <el-tooltip :content="t('designer.panel.subflow')" placement="bottom" :show-after="300">
                 <button class="tab-add" @click="openSubflow">
                   <el-icon :size="12"><Plus /></el-icon>
                 </button>
@@ -564,22 +567,22 @@ onBeforeUnmount(() => {
           <div class="export-brief">
             <div class="export-name">{{ store.current?.name ?? '' }}</div>
             <div class="export-meta">
-              <el-tag effect="plain" size="small">{{ typeLabel }}</el-tag>
-              <span>{{ store.current?.nodes.length ?? 0 }} 个节点</span>
+              <el-tag effect="plain">{{ typeLabel }}</el-tag>
+              <span>{{ t('designer.nodesCount', { n: store.current?.nodes.length ?? 0 }) }}</span>
             </div>
           </div>
-          <p class="sub">导出为轻羽RPA专有流程文件（.leafrpa），在其它设备通过「导入」即可恢复该流程。</p>
+          <p class="sub">{{ t('designer.exportDesc') }}</p>
           <div class="tool-actions">
-            <el-button type="primary" @click="downloadExport">保存文件</el-button>
+            <el-button type="primary" @click="downloadExport">{{ t('designer.saveFile') }}</el-button>
           </div>
         </template>
 
         <template v-else-if="panel === 'check'">
-          <el-empty v-if="!issues.length" description="未发现问题，可以直接运行" :image-size="80" />
+          <el-empty v-if="!issues.length" :description="t('designer.checkOk')" :image-size="80" />
           <ul v-else class="issue-list">
             <li v-for="(it, i) in issues" :key="i">
               <el-tag :type="it.level === 'error' ? 'danger' : 'warning'" effect="light">
-                {{ it.level === 'error' ? '错误' : '提醒' }}
+                {{ it.level === 'error' ? t('designer.levelError') : t('designer.levelWarn') }}
               </el-tag>
               <span>{{ it.message }}</span>
             </li>
@@ -591,82 +594,78 @@ onBeforeUnmount(() => {
             v-model="selectorValue"
             type="textarea"
             :rows="3"
-            placeholder="输入 CSS 或 XPath 选择器，例如 #submit-btn"
+            :placeholder="t('designer.selectorInputPlaceholder')"
             @input="selectorOk = false"
           />
           <div class="selector-actions">
-            <el-button :loading="selectorChecking" @click="checkSelector">校验元素</el-button>
-            <span v-if="selectorOk" class="check-ok">元素可用</span>
+            <el-button :loading="selectorChecking" @click="checkSelector">{{ t('designer.ee.verify') }}</el-button>
+            <span v-if="selectorOk" class="check-ok">{{ t('designer.checkOkLabel') }}</span>
           </div>
           <div class="tool-actions">
             <el-button type="primary" :disabled="!selectorOk" @click="insertSelector">
-              插入到流程
+              {{ t('designer.insertToFlow') }}
             </el-button>
           </div>
         </template>
 
         <template v-else-if="panel === 'capture'">
           <el-form label-position="top">
-            <el-form-item label="元素选择器">
-              <el-input v-model="captureSelector" placeholder="例如 .product-title" clearable />
+            <el-form-item :label="t('designer.labelSelectorPlain')">
+              <el-input v-model="captureSelector" :placeholder="t('designer.selectorExample')" clearable />
             </el-form-item>
-            <el-form-item label="抓取方式">
+            <el-form-item :label="t('designer.labelKind')">
               <el-radio-group v-model="captureKind">
                 <el-radio-button v-for="(m, k) in CAPTURE_TYPES" :key="k" :value="k">
-                  {{ m.label }}
+                  {{ t(m.label) }}
                 </el-radio-button>
               </el-radio-group>
             </el-form-item>
-            <el-form-item v-if="captureKind === 'related'" label="关联关系">
+            <el-form-item v-if="captureKind === 'related'" :label="t('designer.labelRelation')">
               <el-select v-model="captureRelation">
-                <el-option label="父元素" value="parent" />
-                <el-option label="子元素" value="child" />
-                <el-option label="下一个兄弟" value="next" />
-                <el-option label="上一个兄弟" value="prev" />
+                <el-option :label="t('designer.rel.parent')" value="parent" />
+                <el-option :label="t('designer.rel.child')" value="child" />
+                <el-option :label="t('designer.rel.next')" value="next" />
+                <el-option :label="t('designer.rel.prev')" value="prev" />
               </el-select>
             </el-form-item>
             <el-form-item>
-              <el-checkbox v-model="captureInsert">同时插入为流程节点</el-checkbox>
+              <el-checkbox v-model="captureInsert">{{ t('designer.insertAsNode') }}</el-checkbox>
             </el-form-item>
           </el-form>
           <div class="tool-actions">
             <el-button type="primary" :loading="captureRunning" @click="runCapture">
-              开始抓取
+              {{ t('designer.startCapture') }}
             </el-button>
           </div>
         </template>
 
         <template v-else-if="panel === 'subflow'">
           <el-form label-position="top">
-            <el-form-item label="子流程名称">
+            <el-form-item :label="t('designer.labelSubflowName')">
               <el-input
                 v-model="subflowName"
-                placeholder="例如：登录流程"
+                :placeholder="t('designer.subflowPlaceholder')"
                 maxlength="40"
                 clearable
                 @keyup.enter="confirmSubflow"
               />
             </el-form-item>
-            <p class="sub">
-              创建后会生成一个「自定义指令」流程，并在当前流程末尾插入「子流程」引用节点；可稍后在「应用」列表中打开该子流程编辑步骤。
-            </p>
+            <p class="sub">{{ t('designer.subflowDesc') }}</p>
           </el-form>
           <div class="tool-actions">
-            <el-button type="primary" @click="confirmSubflow">创建</el-button>
+            <el-button type="primary" @click="confirmSubflow">{{ t('designer.create') }}</el-button>
           </div>
         </template>
 
         <template v-else-if="panel === 'record'">
           <div class="record-actions">
-            <el-button v-if="!recording" type="primary" @click="startRecord">开始录制</el-button>
-            <el-button v-else type="danger" @click="stopRecord">结束录制</el-button>
+            <el-button v-if="!recording" type="primary" @click="startRecord">{{ t('designer.startRecord') }}</el-button>
+            <el-button v-else type="danger" @click="stopRecord">{{ t('designer.stopRecord') }}</el-button>
             <span class="record-hint" :class="{ recording: recording }">
-              {{ recording ? '录制中… 请在浏览器里点击页面元素' : '需先连接浏览器插件' }}
+              {{ recording ? t('designer.recordingHint') : t('designer.connectHint') }}
             </span>
           </div>
-          <p class="sub">
-            开始录制后，在浏览器中依次点击页面元素，每个元素会自动转换为「获取元素对象」步骤并追加到流程末尾；按 Esc 或点击「结束录制」停止。
-          </p>
+          <p class="sub">{{ t('designer.recordDesc') }}</p>
           <div class="record-list">
             <div v-for="(item, i) in recordItems" :key="item.seq" class="record-item">
               <span class="record-index">{{ i + 1 }}</span>
@@ -674,7 +673,7 @@ onBeforeUnmount(() => {
               <span class="record-selector">{{ item.selector }}</span>
               <span class="record-text">{{ item.text }}</span>
             </div>
-            <el-empty v-if="!recordItems.length" description="暂无采集记录" :image-size="60" />
+            <el-empty v-if="!recordItems.length" :description="t('designer.noRecords')" :image-size="60" />
           </div>
         </template>
       </div>
@@ -686,9 +685,9 @@ onBeforeUnmount(() => {
 
 
 .app-badge {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
   background: var(--el-color-danger);
   color: var(--el-color-white);
   font-size: 13px;
@@ -701,13 +700,13 @@ onBeforeUnmount(() => {
 
 .flow-name-input {
   width: 200px;
-  min-width: 92px;
+  min-width: 96px;
 }
 
 .flow-name-input :deep(.el-input__wrapper) {
   box-shadow: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .flow-name-input :deep(.el-input__inner) {
@@ -735,7 +734,7 @@ onBeforeUnmount(() => {
 .save-state {
   font-size: 12px;
   color: var(--text-3);
-  margin-right: 6px;
+  margin-right: 8px;
   white-space: nowrap;
 }
 
@@ -803,7 +802,7 @@ onBeforeUnmount(() => {
 }
 
 .tb-center {
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
@@ -820,10 +819,10 @@ onBeforeUnmount(() => {
 .tool-body {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 14px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .tool-actions {
@@ -836,7 +835,7 @@ onBeforeUnmount(() => {
 .record-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 8px;
 }
 
@@ -854,15 +853,15 @@ onBeforeUnmount(() => {
   max-height: 260px;
   overflow-y: auto;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px;
+  border-radius: 8px;
+  padding: 8px;
 }
 
 .record-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 6px;
+  padding: 4px 8px;
   font-size: 12px;
   border-radius: 4px;
 }
@@ -872,8 +871,8 @@ onBeforeUnmount(() => {
 }
 
 .record-index {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
   border-radius: 50%;
   background: var(--accent);
@@ -901,7 +900,7 @@ onBeforeUnmount(() => {
 .record-text {
   color: var(--text-3);
   flex-shrink: 0;
-  max-width: 90px;
+  max-width: 88px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -910,8 +909,8 @@ onBeforeUnmount(() => {
 .designer-body {
   flex: 1;
   display: flex;
-  gap: 2px;
-  padding: 0 8px 8px;
+  gap: 4px;
+  padding: 0 4px 4px;
   min-height: 0;
 }
 
@@ -921,7 +920,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   min-height: 0;
 }
 
@@ -929,7 +928,7 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
   display: flex;
-  gap: 2px;
+  gap: 4px;
 }
 
 /* 流程卡片：标签栏 + 步骤列表 */
@@ -947,8 +946,8 @@ onBeforeUnmount(() => {
   height: 36px;
   display: flex;
   align-items: flex-end;
-  gap: 6px;
-  padding: 6px 10px 0;
+  gap: 8px;
+  padding: 4px 12px 0;
   background: color-mix(in srgb, var(--panel) 55%, var(--bg));
   flex-shrink: 0;
 }
@@ -956,8 +955,8 @@ onBeforeUnmount(() => {
 .flow-tab {
   display: inline-flex;
   align-items: center;
-  height: 30px;
-  padding: 0 14px;
+  height: 32px;
+  padding: 0 16px;
   font-size: 13px;
   color: var(--text-2);
   border-radius: 8px 8px 0 0;
@@ -971,8 +970,8 @@ onBeforeUnmount(() => {
 }
 
 .tab-add {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   margin-bottom: 4px;
   border: none;
   background: transparent;
@@ -1006,7 +1005,7 @@ onBeforeUnmount(() => {
 }
 
 .export-brief {
-  padding: 10px 0 12px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -1072,8 +1071,8 @@ onBeforeUnmount(() => {
 .selector-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .check-ok {

@@ -7,6 +7,7 @@ import { useAppStore } from '../store'
 import { kindColor, splitRefs } from '../vars'
 import CommandDialog from './CommandDialog.vue'
 import type { CommandDefinition, FlowNode } from '../types'
+import { t } from '../i18n'
 
 const store = useAppStore()
 
@@ -63,7 +64,7 @@ function summarySegments(node: FlowNode) {
       if (parts.length >= 3) break
     }
   }
-  const summary = parts.join(' · ') || '未配置参数，单击该行进行编辑'
+  const summary = parts.join(' · ') || t('steps.noParams')
   return splitRefs(summary).map((seg) => ({
     text: seg.text,
     ref: seg.ref,
@@ -120,10 +121,10 @@ async function onRowMenu(cmd: string, node: FlowNode) {
   if (cmd === 'toggle') store.toggleNodeDisabled(node.id)
   else if (cmd === 'delete') {
     try {
-      await ElMessageBox.confirm(`确定删除指令「${node.name}」？`, '删除指令', {
+      await ElMessageBox.confirm(t('steps.deleteConfirm', { name: node.name }), t('steps.deleteTitle'), {
         type: 'warning',
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
+        confirmButtonText: t('common.delete'),
+        cancelButtonText: t('common.cancel'),
       })
     } catch {
       return
@@ -152,10 +153,10 @@ function openEditor(node: FlowNode) {
 <template>
   <div class="step-list" @mousedown="onCanvasMouseDown">
     <div v-if="nodes.length === 0" class="step-empty">
-      <el-empty description="还没有任何步骤" :image-size="96">
+      <el-empty :description="t('steps.empty')" :image-size="96">
         <div class="empty-desc">
-          点击左侧指令面板中的指令即可添加第一个步骤；<br />
-          添加后可拖拽行调整执行顺序，点击行查看与编辑属性。
+          {{ t('steps.emptyHint1') }}<br />
+          {{ t('steps.emptyHint2') }}
         </div>
       </el-empty>
     </div>
@@ -176,7 +177,7 @@ function openEditor(node: FlowNode) {
         draggable="true"
         role="button"
         tabindex="0"
-        title="点击编辑指令参数，拖拽可调整顺序"
+        :title="t('steps.rowTooltip')"
         @click="openEditor(node)"
         @keydown.enter="openEditor(node)"
         @keydown.space.prevent="openEditor(node)"
@@ -186,7 +187,7 @@ function openEditor(node: FlowNode) {
         @dragend="onDragEnd"
       >
         <div class="gutter">
-          <span v-if="node.breakpoint" class="bp-dot" title="断点"></span>
+          <span v-if="node.breakpoint" class="bp-dot" :title="t('designer.breakpoint')"></span>
           <span class="line-no">{{ i + 1 }}</span>
         </div>
 
@@ -194,7 +195,7 @@ function openEditor(node: FlowNode) {
           <div class="step-title">
             <span class="cmd-icon" :style="{ background: iconColor(node) }">{{ iconChar(node) }}</span>
             <span class="step-name">{{ node.name }}</span>
-            <span v-if="node.disabled" class="disabled-tag" title="运行与调试时会跳过该步骤">已注释</span>
+            <span v-if="node.disabled" class="disabled-tag" :title="t('steps.disabledTip')">{{ t('steps.disabled') }}</span>
           </div>
           <div class="step-summary">
             <template v-for="(seg, si) in summarySegments(node)" :key="si">
@@ -212,13 +213,13 @@ function openEditor(node: FlowNode) {
         </div>
 
         <div class="step-actions" @click.stop>
-          <el-tooltip content="在此行后插入" placement="top" :show-after="300">
+          <el-tooltip :content="t('steps.insertAfter')" placement="top" :show-after="300">
             <button class="act" @click="openInsert(node)">
               <el-icon :size="13"><Plus /></el-icon>
             </button>
           </el-tooltip>
           <el-tooltip
-            :content="node.breakpoint ? '移除断点' : '设置断点'"
+            :content="node.breakpoint ? t('steps.bpRemove') : t('steps.bpSet')"
             placement="top"
             :show-after="300"
           >
@@ -234,13 +235,13 @@ function openEditor(node: FlowNode) {
             </button>
           </el-tooltip>
           <el-dropdown trigger="click" @command="(cmd: string) => onRowMenu(cmd, node)">
-            <button class="act" title="更多操作">
+            <button class="act" :title="t('steps.more')">
               <el-icon :size="13"><MoreFilled /></el-icon>
             </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="toggle">{{ node.disabled ? '取消注释' : '注释' }}</el-dropdown-item>
-                <el-dropdown-item command="delete">删除</el-dropdown-item>
+                <el-dropdown-item command="toggle">{{ node.disabled ? t('steps.untoggle') : t('steps.toggle') }}</el-dropdown-item>
+                <el-dropdown-item command="delete">{{ t('common.delete') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -248,10 +249,10 @@ function openEditor(node: FlowNode) {
       </div>
     </template>
 
-    <el-dialog v-model="insertVisible" title="在此行后插入指令" width="440px" append-to-body>
+    <el-dialog v-model="insertVisible" :title="t('steps.insertTitle')" width="440px" append-to-body>
       <el-input
         v-model="insertKeyword"
-        placeholder="搜索指令"
+        :placeholder="t('designer.searchCommands')"
         clearable
         :prefix-icon="Search"
         style="margin-bottom: 12px"
@@ -316,7 +317,7 @@ function openEditor(node: FlowNode) {
   display: flex;
   align-items: center;
   min-height: 52px;
-  padding: 5px 12px 5px 0;
+  padding: 4px 12px 4px 0;
   cursor: pointer;
   position: relative;
   user-select: none;
@@ -368,7 +369,7 @@ function openEditor(node: FlowNode) {
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  padding: 0 10px 0 12px;
+  padding: 0 12px;
 }
 
 .line-no {
@@ -392,7 +393,7 @@ function openEditor(node: FlowNode) {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
 }
 
 .step-title {
@@ -405,7 +406,7 @@ function openEditor(node: FlowNode) {
 .cmd-icon {
   width: 20px;
   height: 20px;
-  border-radius: 6px;
+  border-radius: 4px;
   color: #fff;
   font-size: 11px;
   font-weight: 500;
@@ -426,7 +427,7 @@ function openEditor(node: FlowNode) {
 .disabled-tag {
   font-size: 10px;
   line-height: 16px;
-  padding: 0 5px;
+  padding: 0 4px;
   border-radius: 4px;
   background: var(--hover);
   color: var(--text-3);
@@ -459,7 +460,7 @@ function openEditor(node: FlowNode) {
 .step-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
   opacity: 0;
   transition: opacity 0.15s;
@@ -476,7 +477,7 @@ function openEditor(node: FlowNode) {
   height: 24px;
   border: none;
   background: transparent;
-  border-radius: 5px;
+  border-radius: 4px;
   color: var(--text-2);
   display: flex;
   align-items: center;
@@ -497,7 +498,7 @@ function openEditor(node: FlowNode) {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .insert-item {
@@ -505,10 +506,10 @@ function openEditor(node: FlowNode) {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   text-align: left;
   color: var(--text);
 }

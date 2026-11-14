@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import {
   Grid, Lightning, Compass, Reading, Guide, Present, Service,
@@ -9,113 +9,57 @@ import {
 import WindowControls from './WindowControls.vue'
 import { useAppStore, type TabKey } from '../store'
 import { useAuthStore } from '../auth'
+import { avatarSrcOrInitial } from '../avatar'
 import { toastSuccess } from '../notify'
+import { t, type MessageKey } from '../i18n'
+import { watch } from 'vue'
 
 const store = useAppStore()
 const auth = useAuthStore()
 
-const tabs: { key: TabKey; label: string; icon: any }[] = [
-  { key: 'app', label: '应用', icon: Grid },
-  { key: 'trigger', label: '触发器', icon: Lightning },
-  { key: 'market', label: '市场', icon: Compass },
-  { key: 'tutorial', label: '教程', icon: Reading },
-  { key: 'community', label: '社区', icon: Guide },
+/* ---- 顶栏头像与展示名：来自 /api/users/me 的昵称 / 头像地址，设置页保存后即时同步 ---- */
+const avatarDisplay = computed(() => avatarSrcOrInitial(auth.profile?.avatarUrl ?? null, auth.session?.username))
+const avatarFailed = ref(false)
+watch(
+  () => avatarDisplay.value.src,
+  () => {
+    avatarFailed.value = false
+  },
+)
+
+const tabs: { key: TabKey; label: MessageKey; icon: any }[] = [
+  { key: 'app', label: 'topbar.tab.apps', icon: Grid },
+  { key: 'trigger', label: 'topbar.tab.triggers', icon: Lightning },
+  { key: 'market', label: 'topbar.tab.market', icon: Compass },
+  { key: 'tutorial', label: 'topbar.tab.tutorial', icon: Reading },
+  { key: 'community', label: 'topbar.tab.community', icon: Guide },
 ]
 
-/* ---- 消息中心（读取消息中心页持久化的数据，保证与页面一致） ---- */
-const NOTICE_KEY = 'leaf-rpa.notices'
-
-interface NoticeItem {
-  id: string
-  title: string
-  desc: string
-  time: number
-  unread: boolean
-}
-
-function loadNotices(): NoticeItem[] {
-  try {
-    const raw = localStorage.getItem(NOTICE_KEY)
-    if (!raw) return []
-    const list = JSON.parse(raw) as NoticeItem[]
-    return Array.isArray(list) ? list : []
-  } catch {
-    return []
-  }
-}
-
-const notices = ref<NoticeItem[]>([])
-const unreadCount = computed(() => notices.value.filter((n) => n.unread).length)
-/** 面板中最多展示的最新消息条数 */
-const PANEL_LIMIT = 5
-const panelNotices = computed(() => notices.value.slice(0, PANEL_LIMIT))
-
-function persistNotices() {
-  localStorage.setItem(NOTICE_KEY, JSON.stringify(notices.value))
-}
-
-function formatNoticeTime(t: number) {
-  const diff = Date.now() - t
-  if (diff < 60 * 1000) return '刚刚'
-  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)} 分钟前`
-  if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / 3600000)} 小时前`
-  return new Date(t).toLocaleDateString('zh-CN')
-}
-
-/* ---- 消息小面板 ---- */
+/* ---- 消息小面板：公告服务尚未上线，展示空态并跳转消息中心 ---- */
 const noticeVisible = ref(false)
-
-function onNoticeShow() {
-  notices.value = loadNotices()
-}
-
-function readNotice(n: NoticeItem) {
-  if (!n.unread) return
-  const fresh = loadNotices()
-  const target = fresh.find((x) => x.id === n.id)
-  if (target) {
-    target.unread = false
-    persistNotices()
-  }
-  notices.value = fresh
-}
 
 function goNoticePage() {
   noticeVisible.value = false
   store.navigate('notice')
 }
 
-let noticeTimer: ReturnType<typeof setInterval> | null = null
-
-onMounted(() => {
-  notices.value = loadNotices()
-  noticeTimer = setInterval(() => {
-    if (!noticeVisible.value) notices.value = loadNotices()
-  }, 3000)
-})
-
-onBeforeUnmount(() => {
-  if (noticeTimer) clearInterval(noticeTimer)
-})
-
 /* ---- 用户菜单 ---- */
 const userMenuVisible = ref(false)
-const avatarChar = computed(() => (auth.session?.username?.charAt(0) ?? 'U').toUpperCase())
 
-const userMenuItems: { key: string; label: string; icon: any }[] = [
-  { key: 'system', label: '跟随系统设置', icon: Monitor },
-  { key: 'settings', label: '设置', icon: Setting },
-  { key: 'tools', label: '工具', icon: Tools },
-  { key: 'vip', label: '增值服务', icon: Star },
-  { key: 'service', label: '联系轻羽', icon: Service },
-  { key: 'achievement', label: '我的成就', icon: Trophy },
+const userMenuItems: { key: string; label: MessageKey; icon: any }[] = [
+  { key: 'system', label: 'topbar.menu.system', icon: Monitor },
+  { key: 'settings', label: 'topbar.menu.settings', icon: Setting },
+  { key: 'tools', label: 'topbar.menu.tools', icon: Tools },
+  { key: 'vip', label: 'topbar.menu.vip', icon: Star },
+  { key: 'service', label: 'topbar.menu.service', icon: Service },
+  { key: 'achievement', label: 'topbar.menu.achievement', icon: Trophy },
 ]
 
 function onUserMenu(key: string) {
   userMenuVisible.value = false
   if (key === 'system') {
     store.setThemeMode('system')
-    toastSuccess('已切换为跟随系统外观')
+    toastSuccess(t('topbar.switchedSystem'))
     return
   }
   store.navigate(key as 'settings' | 'tools' | 'vip' | 'service' | 'achievement')
@@ -124,16 +68,16 @@ function onUserMenu(key: string) {
 async function onLogout() {
   userMenuVisible.value = false
   try {
-    await ElMessageBox.confirm('确定要退出当前账号吗？', '退出登录', {
+    await ElMessageBox.confirm(t('topbar.logoutConfirm'), t('topbar.logoutTitle'), {
       type: 'warning',
-      confirmButtonText: '退出登录',
-      cancelButtonText: '取消',
+      confirmButtonText: t('topbar.logoutBtn'),
+      cancelButtonText: t('common.cancel'),
     })
   } catch {
     return
   }
   auth.logout()
-  toastSuccess('已退出登录')
+  toastSuccess(t('topbar.loggedOut'))
 }
 
 function goHome() {
@@ -147,13 +91,13 @@ function goBack() {
 
 <template>
   <header class="topbar" data-tauri-drag-region>
-    <el-tooltip v-if="store.page !== 'home'" content="返回" placement="bottom" :show-after="300">
+    <el-tooltip v-if="store.page !== 'home'" :content="t('topbar.back')" placement="bottom" :show-after="300">
       <button class="icon-btn" @click="goBack">
         <el-icon :size="17"><Back /></el-icon>
       </button>
     </el-tooltip>
 
-    <el-tooltip content="返回首页" placement="bottom" :show-after="300">
+    <el-tooltip :content="t('topbar.backHome')" placement="bottom" :show-after="300">
       <div
         class="brand"
         data-tauri-drag-region
@@ -164,9 +108,9 @@ function goBack() {
         @keydown.space.prevent="goHome"
       >
         <span class="brand-logo">
-          <img src="../assets/logo.png" alt="轻羽RPA" />
+          <img src="../assets/logo.png" :alt="t('app.name')" />
         </span>
-        <span class="brand-name">轻羽RPA</span>
+        <span class="brand-name">{{ t('app.name') }}</span>
         <span class="brand-tag">Ai</span>
       </div>
     </el-tooltip>
@@ -180,29 +124,29 @@ function goBack() {
         @click="store.setTab(tab.key)"
       >
         <el-icon :size="15" class="tab-ico"><component :is="tab.icon" /></el-icon>
-        <span>{{ tab.label }}</span>
+        <span>{{ t(tab.label) }}</span>
       </button>
     </nav>
 
     <div class="top-spacer" data-tauri-drag-region></div>
 
     <div class="top-actions">
-      <el-tooltip content="设置" placement="bottom" :show-after="300">
+      <el-tooltip :content="t('topbar.tipSettings')" placement="bottom" :show-after="300">
         <button class="icon-btn" @click="store.navigate('settings')">
           <el-icon :size="18"><Setting /></el-icon>
         </button>
       </el-tooltip>
-      <el-tooltip content="邀请好友" placement="bottom" :show-after="300">
+      <el-tooltip :content="t('topbar.tipInvite')" placement="bottom" :show-after="300">
         <button class="icon-btn" @click="store.navigate('invite')">
           <el-icon :size="18" color="#f75661"><Present /></el-icon>
         </button>
       </el-tooltip>
-      <el-tooltip content="联系客服" placement="bottom" :show-after="300">
+      <el-tooltip :content="t('topbar.tipService')" placement="bottom" :show-after="300">
         <button class="icon-btn" @click="store.navigate('service')">
           <el-icon :size="18"><Service /></el-icon>
         </button>
       </el-tooltip>
-      <el-tooltip content="帮助中心" placement="bottom" :show-after="300">
+      <el-tooltip :content="t('topbar.tipHelp')" placement="bottom" :show-after="300">
         <button class="icon-btn" @click="store.navigate('help')">
           <el-icon :size="17"><QuestionFilled /></el-icon>
         </button>
@@ -214,44 +158,19 @@ function goBack() {
         trigger="click"
         :show-arrow="false"
         popper-class="notice-popover"
-        @show="onNoticeShow"
       >
         <template #reference>
-          <button
-            class="icon-btn"
-            :class="{ 'has-dot': unreadCount > 0 }"
-            title="消息中心"
-          >
+          <button class="icon-btn" :title="t('topbar.noticeCenter')">
             <el-icon :size="18"><Bell /></el-icon>
           </button>
         </template>
         <div class="notice-panel">
           <div class="notice-panel-head">
-            <span class="notice-panel-title">消息通知</span>
-            <span class="notice-panel-sub">{{ unreadCount > 0 ? `${unreadCount} 条未读` : '全部已读' }}</span>
+            <span class="notice-panel-title">{{ t('topbar.noticeTitle') }}</span>
           </div>
-          <div v-if="panelNotices.length" class="notice-panel-list">
-            <div
-              v-for="n in panelNotices"
-              :key="n.id"
-              class="notice-panel-item"
-              :class="{ unread: n.unread }"
-              role="button"
-              tabindex="0"
-              @click="readNotice(n)"
-              @keydown.enter="readNotice(n)"
-            >
-              <span v-if="n.unread" class="notice-panel-dot"></span>
-              <div class="notice-panel-body">
-                <div class="notice-panel-item-title">{{ n.title }}</div>
-                <div class="notice-panel-item-desc">{{ n.desc }}</div>
-              </div>
-              <span class="notice-panel-time">{{ formatNoticeTime(n.time) }}</span>
-            </div>
-          </div>
-          <el-empty v-else :image-size="72" description="暂无消息" />
+          <el-empty :image-size="72" :description="t('topbar.noticeEmpty')" />
           <button class="notice-panel-all" @click="goNoticePage">
-            全部消息
+            {{ t('topbar.noticeAll') }}
             <el-icon :size="12"><ArrowRight /></el-icon>
           </button>
         </div>
@@ -266,18 +185,34 @@ function goBack() {
         popper-class="user-popover"
       >
         <template #reference>
-          <button class="avatar" :title="auth.session?.username">{{ avatarChar }}</button>
+          <button class="avatar" :title="auth.session?.username">
+            <img
+              v-if="avatarDisplay.src && !avatarFailed"
+              :src="avatarDisplay.src"
+              alt=""
+              @error="avatarFailed = true"
+            />
+            <template v-else>{{ avatarDisplay.initial }}</template>
+          </button>
         </template>
         <div class="user-head">
-          <div class="user-avatar">{{ avatarChar }}</div>
+          <div class="user-avatar">
+            <img
+              v-if="avatarDisplay.src && !avatarFailed"
+              :src="avatarDisplay.src"
+              alt=""
+              @error="avatarFailed = true"
+            />
+            <template v-else>{{ avatarDisplay.initial }}</template>
+          </div>
           <div class="user-info">
-            <div class="user-name">{{ auth.session?.username }}</div>
-            <div class="user-phone">{{ auth.maskedPhone }}</div>
+            <div class="user-name">{{ auth.displayName }}</div>
+            <div class="user-phone">{{ auth.session?.username }} · {{ auth.maskedPhone }}</div>
           </div>
         </div>
         <div class="user-plan">
-          <span class="plan-badge">创业版</span>
-          <el-tooltip content="升级套餐" placement="bottom" :show-after="300">
+          <span class="plan-badge">{{ t('vip.freeBadge') }}</span>
+          <el-tooltip :content="t('topbar.tipUpgrade')" placement="bottom" :show-after="300">
             <span
               class="plan-upgrade"
               role="button"
@@ -285,11 +220,10 @@ function goBack() {
               @click="onUserMenu('vip')"
               @keydown.enter="onUserMenu('vip')"
             >
-              升级
+              {{ t('topbar.upgrade') }}
               <el-icon :size="11"><ArrowRight /></el-icon>
             </span>
           </el-tooltip>
-          <div class="plan-expire">有效期至 2026-11-29</div>
         </div>
         <div class="user-menu">
           <button
@@ -299,13 +233,13 @@ function goBack() {
             @click="onUserMenu(item.key)"
           >
             <el-icon :size="15"><component :is="item.icon" /></el-icon>
-            <span>{{ item.label }}</span>
+            <span>{{ t(item.label) }}</span>
             <el-icon v-if="item.key === 'system' && store.themeMode === 'system'" :size="13" class="menu-check"><Select /></el-icon>
           </button>
           <div class="user-menu-divider"></div>
           <button class="user-menu-item logout" @click="onLogout">
             <el-icon :size="15"><SwitchButton /></el-icon>
-            <span>退出登录</span>
+            <span>{{ t('topbar.logout') }}</span>
           </button>
         </div>
       </el-popover>
@@ -318,7 +252,7 @@ function goBack() {
 <style>
 /* 用户菜单与消息面板 popper 挂载在 body 下，需使用全局样式 */
 .user-popover {
-  padding: 14px !important;
+  padding: 16px !important;
   border-radius: 12px !important;
 }
 
@@ -337,7 +271,7 @@ function goBack() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -347,91 +281,13 @@ function goBack() {
   color: var(--text);
 }
 
-.notice-panel-sub {
-  font-size: 12px;
-  color: var(--text-3);
-}
-
-.notice-panel-list {
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.notice-panel-item {
-  position: relative;
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 14px 10px 20px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.notice-panel-item + .notice-panel-item {
-  border-top: 1px solid var(--border);
-}
-
-.notice-panel-item:hover {
-  background: var(--panel);
-}
-
-.notice-panel-item:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.notice-panel-dot {
-  position: absolute;
-  left: 10px;
-  top: 16px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex-shrink: 0;
-}
-
-.notice-panel-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.notice-panel-item-title {
-  font-size: 13px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.notice-panel-item.unread .notice-panel-item-title {
-  font-weight: 500;
-}
-
-.notice-panel-item-desc {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--text-3);
-  line-height: 1.5;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.notice-panel-time {
-  flex-shrink: 0;
-  font-size: 11px;
-  color: var(--text-3);
-  line-height: 18px;
-}
-
 .notice-panel-all {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
   width: 100%;
-  padding: 11px 0;
+  padding: 12px 0;
   border: none;
   border-top: 1px solid var(--border);
   background: transparent;
@@ -449,8 +305,8 @@ function goBack() {
 .user-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 2px 2px 12px;
+  gap: 12px;
+  padding: 0 0 12px;
 }
 
 .user-avatar {
@@ -465,6 +321,16 @@ function goBack() {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* 自定义头像图片铺满圆形容器，加载失败回退首字 */
+.avatar img,
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
 }
 
 .user-info {
@@ -481,7 +347,7 @@ function goBack() {
 }
 
 .user-phone {
-  margin-top: 2px;
+  margin-top: 4px;
   font-size: 12px;
   color: var(--text-3);
 }
@@ -490,7 +356,7 @@ function goBack() {
   position: relative;
   border-radius: 8px;
   background: #f3efff;
-  padding: 10px 12px;
+  padding: 12px;
   margin-bottom: 8px;
 }
 
@@ -505,10 +371,10 @@ function goBack() {
 .plan-upgrade {
   position: absolute;
   right: 12px;
-  top: 10px;
+  top: 12px;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   font-size: 12px;
   color: var(--text-2);
   cursor: pointer;
@@ -524,12 +390,6 @@ function goBack() {
   border-radius: 4px;
 }
 
-.plan-expire {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--text-3);
-}
-
 .user-menu {
   display: flex;
   flex-direction: column;
@@ -538,9 +398,9 @@ function goBack() {
 .user-menu-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 9px 8px;
+  padding: 8px;
   border: none;
   background: transparent;
   border-radius: 8px;
@@ -577,6 +437,6 @@ function goBack() {
 .user-menu-divider {
   height: 1px;
   background: var(--border);
-  margin: 6px 0;
+  margin: 8px 0;
 }
 </style>

@@ -12,6 +12,7 @@ import type { CommandParam, FlowNode } from '../types'
 import { declaresElement, declareKind, isDeclareKey, refsIn } from '../vars'
 import { suggestName } from '../elements'
 import { pickElement } from '../web-executor'
+import { t } from '../i18n'
 import CodeEditor from './CodeEditor.vue'
 import VariableInput from './VariableInput.vue'
 
@@ -47,7 +48,7 @@ watch(
   { immediate: true },
 )
 
-const cmdIcon = computed(() => (def.value?.name ?? '指').charAt(0))
+const cmdIcon = computed(() => (def.value?.name ?? t('designer.cmdIconFallback')).charAt(0))
 const cmdColor = computed(() => def.value?.color ?? 'var(--accent)')
 
 function close() {
@@ -101,12 +102,12 @@ async function startPick(key: string) {
       similarCount: element.similarCount,
       url: element.url,
     })
-    store.log('success', `已抓取元素 <${element.tagName}>${element.id ? '#' + element.id : ''}：${selector}`)
+    store.log('success', t('designer.logPicked', { tag: element.tagName, id: element.id ? '#' + element.id : '', selector }))
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     if (!token.cancelled) {
       pickError.value = msg
-      store.log('error', `元素抓取失败：${msg}`)
+      store.log('error', t('designer.logPickFailed', { msg }))
     }
   } finally {
     delete pickToken[key]
@@ -132,9 +133,9 @@ async function runOnce() {
 /** 输出参数的提示文案：元素类结果变量额外说明 */
 function outputHint(p: CommandParam): string {
   if (def.value && declaresElement(def.value.type, p.key)) {
-    return '页面元素会存为元素变量，可用于后续的元素操作指令'
+    return t('designer.hintElement')
   }
-  return '执行结果将保存到该变量'
+  return t('designer.hintResult')
 }
 </script>
 
@@ -156,25 +157,25 @@ function outputHint(p: CommandParam): string {
           {{ cmdIcon }}
         </span>
         <div class="cd-title-box">
-          <div class="cd-title">{{ def?.name ?? '指令设置' }}</div>
-          <div class="cd-desc">{{ def?.description ?? '设置该指令的参数' }}</div>
+          <div class="cd-title">{{ def?.name ?? t('designer.cmdSettings') }}</div>
+          <div class="cd-desc">{{ def?.description ?? t('designer.cmdSettingsDesc') }}</div>
         </div>
       </div>
     </template>
 
     <el-tabs v-model="activeTab" class="cd-tabs">
-      <el-tab-pane label="常规" name="general" />
-      <el-tab-pane label="错误处理" name="error" />
+      <el-tab-pane :label="t('designer.tabGeneral')" name="general" />
+      <el-tab-pane :label="t('designer.tabError')" name="error" />
     </el-tabs>
 
     <div class="cd-body">
       <template v-if="activeTab === 'general'">
         <section v-if="inputParams.length" class="cd-section">
-          <div class="cd-section-title">指令输入</div>
+          <div class="cd-section-title">{{ t('designer.sectionInput') }}</div>
           <div v-for="p in inputParams" :key="p.key" class="cd-row">
             <div class="cd-label">
               <span>{{ p.label }}</span>
-              <el-tooltip :content="`参数键：${p.key}`" placement="top">
+              <el-tooltip :content="t('designer.paramKey', { key: p.key })" placement="top">
                 <el-icon class="cd-info" :size="12"><InfoFilled /></el-icon>
               </el-tooltip>
             </div>
@@ -195,7 +196,7 @@ function outputHint(p: CommandParam): string {
               <el-switch
                 v-else-if="p.type === 'boolean'"
                 :model-value="!!draft[p.key]"
-                active-text="启用"
+                :active-text="t('designer.enable')"
                 @update:model-value="draft[p.key] = $event"
               />
 
@@ -216,21 +217,20 @@ function outputHint(p: CommandParam): string {
               <div v-else-if="isSelectorParam(p)" class="cd-selector">
                 <VariableInput
                   v-model="draft[p.key] as string"
-                  placeholder="点击「抓取」后在页面上点选元素"
+                  :placeholder="t('designer.pickPlaceholder')"
                 />
                 <el-tooltip
-                  :content="pickToken[p.key] ? '再次点击取消抓取' : '到浏览器页面上点选元素'"
+                  :content="pickToken[p.key] ? t('designer.pickCancelTip') : t('designer.pickTip')"
                   placement="top"
                   :show-after="300"
                 >
                   <el-button
                     type="primary"
                     :plain="!pickToken[p.key]"
-                    size="small"
                     :class="{ picking: pickToken[p.key] }"
                     @click="startPick(p.key)"
                   >
-                    {{ pickToken[p.key] ? '抓取中…' : '抓取' }}
+                    {{ pickToken[p.key] ? t('designer.picking') : t('designer.pick') }}
                   </el-button>
                 </el-tooltip>
               </div>
@@ -240,7 +240,7 @@ function outputHint(p: CommandParam): string {
                 v-model="draft[p.key] as string"
                 :type="p.type === 'textarea' ? 'textarea' : 'text'"
                 :rows="3"
-                :placeholder="`请输入${p.label}`"
+                :placeholder="t('designer.enterParam', { label: p.label })"
               />
             </div>
           </div>
@@ -248,7 +248,7 @@ function outputHint(p: CommandParam): string {
         </section>
 
         <section v-if="outputParams.length" class="cd-section">
-          <div class="cd-section-title">指令输出</div>
+          <div class="cd-section-title">{{ t('designer.sectionOutput') }}</div>
           <div v-for="p in outputParams" :key="p.key" class="cd-row">
             <div class="cd-label">
               <span>{{ p.label }}</span>
@@ -257,24 +257,24 @@ function outputHint(p: CommandParam): string {
               </el-tooltip>
             </div>
             <div class="cd-control">
-              <VariableInput v-model="draft[p.key] as string" :placeholder="`变量名，如 ${p.value}`" />
+              <VariableInput v-model="draft[p.key] as string" :placeholder="t('designer.varPlaceholder', { example: String(p.value ?? '') })" />
             </div>
           </div>
         </section>
       </template>
 
       <section v-else class="cd-section">
-        <div class="cd-section-title">错误处理</div>
+        <div class="cd-section-title">{{ t('designer.tabError') }}</div>
         <div class="cd-row">
-          <div class="cd-label"><span>失败后</span></div>
+          <div class="cd-label"><span>{{ t('designer.afterFail') }}</span></div>
           <div class="cd-control">
             <el-select model-value="stop">
-              <el-option label="终止流程并记录错误" value="stop" />
-              <el-option label="继续执行后续指令" value="continue" disabled />
+              <el-option :label="t('designer.optStop')" value="stop" />
+              <el-option :label="t('designer.optContinue')" value="continue" disabled />
             </el-select>
           </div>
         </div>
-        <div class="cd-hint">当前版本指令失败会终止流程，并在「错误列表」中记录原因。</div>
+        <div class="cd-hint">{{ t('designer.errorHint') }}</div>
       </section>
     </div>
 
@@ -283,11 +283,11 @@ function outputHint(p: CommandParam): string {
         <el-button class="cd-run" :loading="running" @click="runOnce">
           <el-icon v-if="!running" :size="12"><VideoPlay /></el-icon>
           <el-icon v-else :size="12"><Loading /></el-icon>
-          运行指令
+          {{ t('designer.runCmd') }}
         </el-button>
         <div class="cd-spacer"></div>
-        <el-button type="primary" @click="confirm">确定</el-button>
-        <el-button @click="close">取消</el-button>
+        <el-button type="primary" @click="confirm">{{ t('common.confirm') }}</el-button>
+        <el-button @click="close">{{ t('common.cancel') }}</el-button>
       </div>
     </template>
   </el-drawer>
@@ -297,8 +297,8 @@ function outputHint(p: CommandParam): string {
 .cd-head {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding-right: 18px;
+  gap: 12px;
+  padding-right: 16px;
 }
 
 .cd-icon {
@@ -326,7 +326,7 @@ function outputHint(p: CommandParam): string {
 }
 
 .cd-desc {
-  margin-top: 2px;
+  margin-top: 4px;
   font-size: 12px;
   color: var(--text-3);
   line-height: 1.5;
@@ -355,7 +355,7 @@ function outputHint(p: CommandParam): string {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 5px 0;
+  padding: 4px 0;
 }
 
 .cd-label {
@@ -364,7 +364,7 @@ function outputHint(p: CommandParam): string {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding-top: 6px;
+  padding-top: 4px;
   font-size: 12px;
   color: var(--text-2);
   line-height: 20px;
@@ -380,7 +380,7 @@ function outputHint(p: CommandParam): string {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .cd-control :deep(.el-select),
@@ -397,7 +397,7 @@ function outputHint(p: CommandParam): string {
 .cd-selector {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex: 1;
   min-width: 0;
 }
@@ -407,14 +407,14 @@ function outputHint(p: CommandParam): string {
 }
 
 .cd-pick-error {
-  margin: 2px 0 0 128px;
+  margin: 4px 0 0 128px;
   font-size: 11px;
   color: var(--el-color-danger, #f53f3f);
   word-break: break-all;
 }
 
 .cd-hint {
-  padding: 2px 0 0 128px;
+  padding: 4px 0 0 128px;
   font-size: 11px;
   color: var(--text-3);
   line-height: 1.6;
@@ -457,7 +457,7 @@ function outputHint(p: CommandParam): string {
 /* 属性抽屉：右侧展开，头部/主体留白统一，头部下边框由页签承载 */
 .cmd-drawer .el-drawer__header {
   margin-bottom: 0;
-  padding: 14px 16px 10px;
+  padding: 16px 16px 12px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -467,7 +467,7 @@ function outputHint(p: CommandParam): string {
 }
 
 .cmd-drawer .el-drawer__footer {
-  padding: 10px 16px;
+  padding: 12px 16px;
   border-top: 1px solid var(--border);
 }
 </style>

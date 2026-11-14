@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import type { useAppStore } from './store'
 import type { FlowMeta } from './types'
+import { getTriggers, saveTriggers as bridgeSaveTriggers, type BridgeTrigger } from './bridge'
+import { t } from './i18n'
 
 export type TriggerKind = '定时触发' | '循环触发' | '手动触发'
 
@@ -52,6 +54,21 @@ function todayKey(): string {
 
 export function createTriggerId(): string {
   return newId('trig_')
+}
+
+function toBridge(t: Trigger): BridgeTrigger {
+  return {
+    id: t.id,
+    name: t.name,
+    kind: t.kind,
+    flow: t.flow,
+    flowId: t.flowId,
+    enabled: t.enabled,
+    time: t.time,
+    interval: t.interval,
+    lastRun: t.lastRun,
+    lastRunAt: t.lastRunAt,
+  }
 }
 
 export function loadTriggers(): Trigger[] {
@@ -108,21 +125,21 @@ export function saveTodayRuns(count: number): void {
 }
 
 /** 计算“下次执行”的展示文案 */
-export function nextRunLabel(t: Trigger, now = Date.now()): string {
-  if (!t.enabled) return '已停用'
-  if (t.kind === '手动触发') return '手动'
-  if (t.kind === '定时触发') {
-    const [h, m] = t.time.split(':').map(Number)
-    if (Number.isNaN(h) || Number.isNaN(m)) return t.time
+export function nextRunLabel(tr: Trigger, now = Date.now()): string {
+  if (!tr.enabled) return t('trigger.stateStopped')
+  if (tr.kind === '手动触发') return t('trigger.stateManual')
+  if (tr.kind === '定时触发') {
+    const [h, m] = tr.time.split(':').map(Number)
+    if (Number.isNaN(h) || Number.isNaN(m)) return tr.time
     const current = new Date(now)
     const next = new Date(current)
     next.setHours(h, m, 0, 0)
     if (next.getTime() <= current.getTime()) next.setDate(next.getDate() + 1)
-    const prefix = next.toDateString() === current.toDateString() ? '今天' : '明天'
-    return `${prefix} ${t.time}`
+    const prefix = next.toDateString() === current.toDateString() ? t('trigger.today') : t('trigger.tomorrow')
+    return `${prefix} ${tr.time}`
   }
-  const base = t.lastRunAt > 0 ? t.lastRunAt : now
-  return new Date(base + t.interval * 1000).toLocaleTimeString('zh-CN', {
+  const base = tr.lastRunAt > 0 ? tr.lastRunAt : now
+  return new Date(base + tr.interval * 1000).toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -140,13 +157,42 @@ export const useTriggerStore = defineStore('trigger', {
     enabledCount: (state) => state.triggers.filter((t) => t.enabled).length,
   },
   actions: {
-    load() {
-      this.triggers = loadTriggers()
+    /** 加载触发器：Tauri 环境以 Rust 侧 triggers.json 为准，浏览器回退 localStorage */
+    async load() {
+      let list: Trigger[] | null = null
+      try {
+        const remote = await getTriggers()
+        if (remote.length > 0 || !localStorage.getItem(TRIGGERS_KEY)) {
+          list = remote.map(
+            (t) =>
+              ({
+                ...t,
+                kind: t.kind === '循环触发' || t.kind === '手动触发' ? t.kind : '定时触发',
+                time: t.time || '09:00',
+                interval: t.interval > 0 ? t.interval : 60,
+                lastRun: t.lastRun || '从未',
+                lastRunAt: t.lastRunAt || 0,
+                flowId: t.flowId || '',
+                enabled: t.enabled !== false,
+              }) as Trigger,
+          )
+        }
+      } catch {
+        /* Rust 侧读取失败时回退本地 */
+      }
+      if (list === null) {
+        list = loadTriggers()
+      }
+      this.triggers = list
       this.history = loadHistory()
       this.todayRuns = loadTodayRuns()
     },
+    /** 持久化：localStorage 即时缓存 + Rust 侧 triggers.json（供常驻调度线程读取） */
     persist() {
       saveTriggers(this.triggers)
+      void bridgeSaveTriggers(this.triggers.map(toBridge)).catch(() => {
+        /* Rust 侧保存失败时仍有本地缓存 */
+      })
     },
     persistHistory() {
       saveHistory(this.history)
@@ -190,33 +236,33 @@ export const useTriggerStore = defineStore('trigger', {
 })
 
 /** 立即执行某个触发器关联的流程，并写入执行记录 */
-export async function runTriggerNow(app: AppStore, t: Trigger): Promise<TriggerRun> {
-  const meta = app.flows.find((f) => f.id === t.flowId) ?? app.flows.find((f) => f.name === t.flow)
+export async function runTriggerNow(app: AppStore, tr: Trigger): Promise<TriggerRun> {
+  const meta = app.flows.find((f) => f.id === tr.flowId) ?? app.flows.find((f) => f.name === tr.flow)
   const time = Date.now()
   if (!meta) {
-    app.log('error', `触发器「${t.name}」关联的流程不存在，已跳过`)
+    app.log('error', `触发器「${tr.name}」关联的流程不存在，已跳过`)
     return {
       id: newId('run_'),
-      triggerId: t.id,
-      triggerName: t.name,
-      flowName: t.flow,
+      triggerId: tr.id,
+      triggerName: tr.name,
+      flowName: tr.flow,
       time,
       ok: false,
-      message: '关联流程不存在',
+      message: t('trigger.flowMissing'),
     }
   }
   await app.openFlow(meta.id)
-  app.log('info', `触发器「${t.name}」已触发`)
+  app.log('info', `触发器「${tr.name}」已触发`)
   await app.run()
   const failed = app.logs.some((l) => l.level === 'error')
   return {
     id: newId('run_'),
-    triggerId: t.id,
-    triggerName: t.name,
-    flowName: t.flow,
+    triggerId: tr.id,
+    triggerName: tr.name,
+    flowName: tr.flow,
     time,
     ok: !failed,
-    message: failed ? '执行失败，详见运行日志' : '执行完成',
+    message: failed ? t('trigger.notifyFail') : t('trigger.notifyDone'),
   }
 }
 

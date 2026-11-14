@@ -5,6 +5,7 @@ import { User, Lock, Minus, Close, ChatDotRound, Promotion, Service, Iphone } fr
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useAuthStore } from '../auth'
 import { toastError, toastInfo, toastSuccess } from '../notify'
+import { t, type MessageKey } from '../i18n'
 import mascot from '../assets/mascot.png'
 import logo from '../assets/logo.png'
 
@@ -13,11 +14,14 @@ const hasTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in windo
 const appWindow = hasTauri ? getCurrentWindow() : null
 
 /* ---- 轮播名言（固定尺寸，避免布局抖动） ---- */
-const quotes = [
-  { text: '人生的价值在于觉醒和思考的能力，而不只在于生存。', author: '亚里士多德' },
-  { text: '自动化不是替代人，而是把人从重复劳动中解放出来。', author: '轻羽RPA' },
-  { text: '把时间还给创造力，把重复交给机器。', author: '轻羽RPA' },
+const quoteKeys: { text: MessageKey; author: MessageKey }[] = [
+  { text: 'login.quote1.text', author: 'login.quote1.author' },
+  { text: 'login.quote2.text', author: 'login.quote2.author' },
+  { text: 'login.quote3.text', author: 'login.quote3.author' },
 ]
+const quotes = computed(() =>
+  quoteKeys.map((q) => ({ text: t(q.text), author: t(q.author) })),
+)
 const quoteIndex = ref(0)
 
 /** 在标点符号后换行，避免从句子中间生硬断开 */
@@ -27,7 +31,7 @@ function formatQuote(text: string): string {
 let quoteTimer: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
   quoteTimer = setInterval(() => {
-    quoteIndex.value = (quoteIndex.value + 1) % quotes.length
+    quoteIndex.value = (quoteIndex.value + 1) % quotes.value.length
   }, 5000)
 })
 onUnmounted(() => {
@@ -37,12 +41,20 @@ onUnmounted(() => {
 /* ---- 卡片内视图切换：登录 / 注册 / 忘记密码 ---- */
 type CardView = 'login' | 'register' | 'forgot'
 const view = ref<CardView>('login')
-const viewMeta: Record<CardView, { title: string; hint: string; switchText: string; switchLabel: string }> = {
-  login: { title: '登录', hint: '还没有账号？', switchText: '注册', switchLabel: '切换到注册' },
-  register: { title: '注册', hint: '已有账号？', switchText: '登录', switchLabel: '切换到登录' },
-  forgot: { title: '重置密码', hint: '想起密码了？', switchText: '返回登录', switchLabel: '切换到登录' },
+const viewMeta: Record<CardView, { title: MessageKey; hint: MessageKey; switchText: MessageKey; switchLabel: MessageKey }> = {
+  login: { title: 'login.cardTitle.login', hint: 'login.cardHint.login', switchText: 'login.cardSwitch.login', switchLabel: 'login.cardSwitchLabel.login' },
+  register: { title: 'login.cardTitle.register', hint: 'login.cardHint.register', switchText: 'login.cardSwitch.register', switchLabel: 'login.cardSwitchLabel.register' },
+  forgot: { title: 'login.cardTitle.forgot', hint: 'login.cardHint.forgot', switchText: 'login.cardSwitch.forgot', switchLabel: 'login.cardSwitchLabel.forgot' },
 }
-const currentMeta = computed(() => viewMeta[view.value])
+const currentMeta = computed(() => {
+  const meta = viewMeta[view.value]
+  return {
+    title: t(meta.title),
+    hint: t(meta.hint),
+    switchText: t(meta.switchText),
+    switchLabel: t(meta.switchLabel),
+  }
+})
 
 /* ---- 登录表单 ---- */
 const form = reactive({
@@ -53,10 +65,10 @@ const autoLogin = ref(false)
 const rememberPassword = ref(auth.rememberPassword)
 const logging = ref(false)
 const loginFormRef = ref<FormInstance>()
-const loginRules: FormRules = {
-  username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
-}
+const loginRules = computed<FormRules>(() => ({
+  username: [{ required: true, message: t('login.usernamePlaceholder'), trigger: 'blur' }],
+  password: [{ required: true, message: t('login.passwordRequired'), trigger: 'blur' }],
+}))
 
 const accountMatches = computed(() => auth.accounts.map((a) => a.username))
 
@@ -65,13 +77,12 @@ async function handleLogin() {
   if (!valid) return
   logging.value = true
   try {
-    await new Promise((resolve) => setTimeout(resolve, 400))
-    const err = auth.login(form.username, form.password, autoLogin.value, rememberPassword.value)
+    const err = await auth.login(form.username, form.password, autoLogin.value, rememberPassword.value)
     if (err) {
-      toastError(err, { title: '登录失败', offset: 80 })
+      toastError(err, { title: t('login.loginFailed'), offset: 80 })
       return
     }
-    toastSuccess(`欢迎回来，${auth.session?.username}`, { title: '登录成功', duration: 2200 })
+    toastSuccess(t('login.welcomeBack', { name: auth.session?.username ?? '' }), { title: t('login.loginSuccess'), duration: 2200 })
   } finally {
     logging.value = false
   }
@@ -79,61 +90,71 @@ async function handleLogin() {
 
 /* ---- 注册表单（卡片内切换，不再弹窗） ---- */
 const regFormRef = ref<FormInstance>()
-const regForm = reactive({ username: '', phone: '', password: '', confirm: '' })
-const regRules: FormRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+const regForm = reactive({ username: '', phone: '', code: '', password: '', confirm: '' })
+const regRules = computed<FormRules>(() => ({
+  username: [{ required: true, message: t('login.usernameRequired'), trigger: 'blur' }],
   phone: [
-    { required: true, message: '请输入手机号', trigger: 'blur' },
-    { pattern: /^1\d{10}$/, message: '手机号格式不正确', trigger: 'blur' },
+    { required: true, message: t('login.phoneRequired'), trigger: 'blur' },
+    { pattern: /^1\d{10}$/, message: t('login.phoneInvalid'), trigger: 'blur' },
+  ],
+  code: [
+    { required: true, message: t('login.codeRequired'), trigger: 'blur' },
+    { pattern: /^\d{6}$/, message: t('login.codeInvalid'), trigger: 'blur' },
   ],
   password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少 6 位', trigger: 'blur' },
+    { required: true, message: t('login.passwordRequired'), trigger: 'blur' },
+    { min: 6, message: t('login.passwordMin'), trigger: 'blur' },
   ],
   confirm: [
-    { required: true, message: '请再次输入密码', trigger: 'blur' },
+    { required: true, message: t('login.confirmRequired'), trigger: 'blur' },
     {
       validator: (_rule, value: string, callback) => {
-        if (value !== regForm.password) callback(new Error('两次输入的密码不一致'))
+        if (value !== regForm.password) callback(new Error(t('login.confirmMismatch')))
         else callback()
       },
       trigger: 'blur',
     },
   ],
-}
+}))
 
 async function handleRegister() {
   const valid = await regFormRef.value?.validate().catch(() => false)
   if (!valid) return
-  const err = auth.register(regForm.username, regForm.phone, regForm.password)
+  const err = await auth.register(regForm.username, regForm.phone, regForm.password, regForm.code)
   if (err) {
-    toastError(err, { title: '注册失败', position: 'top-left' })
+    toastError(err, { title: t('login.registerFailed'), position: 'top-left' })
     return
   }
   form.username = auth.lastUsername
   form.password = ''
   regForm.username = ''
   regForm.phone = ''
+  regForm.code = ''
   regForm.password = ''
   regForm.confirm = ''
-  view.value = 'login'
-  toastSuccess('注册成功，请登录', { title: '注册完成', duration: 2400 })
+  if (auth.session) {
+    // 云端注册成功即建立会话，直接进入主界面
+    toastSuccess(t('login.welcomeJoin', { name: auth.session.username }), { title: t('login.registerSuccess'), duration: 2400 })
+  } else {
+    view.value = 'login'
+    toastSuccess(t('login.registerOkPleaseLogin'), { title: t('login.registerDone'), duration: 2400 })
+  }
 }
 
 /* ---- 忘记密码 ---- */
 const forgotFormRef = ref<FormInstance>()
 const forgotForm = reactive({ username: '', phone: '', password: '' })
-const forgotRules: FormRules = {
-  username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
+const forgotRules = computed<FormRules>(() => ({
+  username: [{ required: true, message: t('login.usernamePlaceholder'), trigger: 'blur' }],
   phone: [
-    { required: true, message: '请输入注册手机号', trigger: 'blur' },
-    { pattern: /^1\d{10}$/, message: '手机号格式不正确', trigger: 'blur' },
+    { required: true, message: t('login.regPhoneRequired'), trigger: 'blur' },
+    { pattern: /^1\d{10}$/, message: t('login.phoneInvalid'), trigger: 'blur' },
   ],
   password: [
-    { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 6, message: '密码至少 6 位', trigger: 'blur' },
+    { required: true, message: t('login.newPasswordRequired'), trigger: 'blur' },
+    { min: 6, message: t('login.passwordMin'), trigger: 'blur' },
   ],
-}
+}))
 
 function openForgot() {
   forgotForm.username = form.username
@@ -145,39 +166,41 @@ function openForgot() {
 async function handleReset() {
   const valid = await forgotFormRef.value?.validate().catch(() => false)
   if (!valid) return
-  const err = auth.resetPassword(forgotForm.username, forgotForm.phone, forgotForm.password)
+  const err = await auth.resetPassword(forgotForm.username, forgotForm.phone, forgotForm.password)
   if (err) {
-    toastError(err, { title: '重置失败', position: 'bottom-right' })
+    toastError(err, { title: t('login.resetFailed'), position: 'bottom-right' })
     return
   }
   form.username = forgotForm.username
   form.password = ''
   view.value = 'login'
-  toastSuccess('密码已重置，请使用新密码登录', { title: '密码已更新', duration: 3000 })
+  toastSuccess(t('login.resetOk'), { title: t('login.resetDone'), duration: 3000 })
 }
 
-/* ---- 管理员一键登录（开发调试用） ---- */
-const DEV_ADMIN = { username: 'admin', phone: '13800000000', password: 'admin123' }
+/* ---- 管理员登录（后端管理员账号） ---- */
+const ADMIN = { username: 'admin', phone: '13800000000', password: 'admin123' }
 
-function devAdminLogin() {
-  if (!auth.accounts.some((a) => a.username === DEV_ADMIN.username)) {
-    const err = auth.register(DEV_ADMIN.username, DEV_ADMIN.phone, DEV_ADMIN.password)
+async function adminLogin() {
+  let err = await auth.login(ADMIN.username, ADMIN.password, true, false)
+  if (err) {
+    // 管理员账号不存在时先通过后端注册（验证码 123456），再登录
+    const regErr = await auth.register(ADMIN.username, ADMIN.phone, ADMIN.password, '123456')
+    if (regErr) {
+      toastError(regErr, { title: t('login.adminFailed') })
+      return
+    }
+    err = await auth.login(ADMIN.username, ADMIN.password, true, false)
     if (err) {
-      toastError(err, { title: '一键登录失败' })
+      toastError(err, { title: t('login.adminFailed') })
       return
     }
   }
-  const err = auth.login(DEV_ADMIN.username, DEV_ADMIN.password, true, false)
-  if (err) {
-    toastError(err, { title: '一键登录失败' })
-    return
-  }
-  toastSuccess(`管理员 ${auth.session?.username} 已一键登录`, { title: '登录成功', duration: 2200 })
+  toastSuccess(t('login.adminOk', { name: auth.session?.username ?? '' }), { title: t('login.loginSuccess'), duration: 2200 })
 }
 
 /* ---- 三方登录 ---- */
 function thirdParty(name: string) {
-  toastInfo(`${name}登录仅支持企业付费用户`, { title: '三方登录', offset: 64 })
+  toastInfo(t('login.thirdOnly', { name }), { title: t('login.thirdTitle'), offset: 64 })
 }
 
 function handleMinimize() {
@@ -198,17 +221,17 @@ function handleClose() {
     </div>
     <header class="login-top" data-tauri-drag-region>
       <div class="login-brand" data-tauri-drag-region>
-        <img class="brand-logo" :src="logo" alt="轻羽RPA" />
-        <span class="brand-name">轻羽RPA</span>
+        <img class="brand-logo" :src="logo" :alt="t('app.name')" />
+        <span class="brand-name">{{ t('app.name') }}</span>
         <span class="brand-version">v0.1.0</span>
       </div>
       <div v-if="hasTauri" class="win-controls">
-        <el-tooltip content="最小化" placement="bottom" :show-after="300">
+        <el-tooltip :content="t('win.minimize')" placement="bottom" :show-after="300">
           <button class="win-btn" @click="handleMinimize">
             <el-icon :size="15"><Minus /></el-icon>
           </button>
         </el-tooltip>
-        <el-tooltip content="关闭" placement="bottom" :show-after="300">
+        <el-tooltip :content="t('win.close')" placement="bottom" :show-after="300">
           <button class="win-btn close" @click="handleClose">
             <el-icon :size="15"><Close /></el-icon>
           </button>
@@ -218,7 +241,7 @@ function handleClose() {
 
     <div class="login-body">
       <section class="login-hero">
-        <img class="hero-img" :src="mascot" alt="轻羽RPA" />
+        <img class="hero-img" :src="mascot" :alt="t('app.name')" />
         <div class="hero-quote">
           <transition name="quote-fade" mode="out-in">
             <div :key="quoteIndex" class="quote-slide">
@@ -263,7 +286,7 @@ function handleClose() {
                     v-model="form.username"
                     class="login-field"
                     :fetch-suggestions="(_q: string, cb: (list: { value: string }[]) => void) => cb(accountMatches.map((v) => ({ value: v })))"
-                    placeholder="请输入账号"
+                    :placeholder="t('login.usernamePlaceholder')"
                     clearable
                     @keyup.enter="handleLogin"
                   >
@@ -277,7 +300,7 @@ function handleClose() {
                     v-model="form.password"
                     class="login-field"
                     type="password"
-                    placeholder="请输入密码"
+                    :placeholder="t('login.passwordPlaceholder')"
                     show-password
                     @keyup.enter="handleLogin"
                   >
@@ -289,38 +312,38 @@ function handleClose() {
               </el-form>
 
               <div class="options">
-                <el-checkbox v-model="autoLogin">自动登录</el-checkbox>
-                <el-checkbox v-model="rememberPassword">记住密码</el-checkbox>
+                <el-checkbox v-model="autoLogin">{{ t('login.autoLogin') }}</el-checkbox>
+                <el-checkbox v-model="rememberPassword">{{ t('login.rememberPassword') }}</el-checkbox>
               </div>
 
               <el-button class="login-btn" type="primary" size="large" :loading="logging" @click="handleLogin">
-                登录
+                {{ t('login.submit') }}
               </el-button>
 
               <div class="forgot">
-                <a class="link" @click="openForgot">忘记密码？</a>
+                <a class="link" @click="openForgot">{{ t('login.forgot') }}</a>
               </div>
 
-              <el-divider class="third-divider">三方登录仅支持企业付费用户</el-divider>
+              <el-divider class="third-divider">{{ t('login.thirdDivider') }}</el-divider>
 
               <div class="third-list">
-                <el-tooltip content="微信登录" placement="top" :show-after="300">
-                  <el-button class="third-btn" circle @click="thirdParty('微信')">
+                <el-tooltip :content="t('login.wechatTip')" placement="top" :show-after="300">
+                  <el-button class="third-btn" circle @click="thirdParty(t('login.name.wechat'))">
                     <el-icon :size="18" color="#2aae67"><ChatDotRound /></el-icon>
                   </el-button>
                 </el-tooltip>
-                <el-tooltip content="钉钉登录" placement="top" :show-after="300">
-                  <el-button class="third-btn" circle @click="thirdParty('钉钉')">
+                <el-tooltip :content="t('login.dingtalkTip')" placement="top" :show-after="300">
+                  <el-button class="third-btn" circle @click="thirdParty(t('login.name.dingtalk'))">
                     <el-icon :size="18" color="#2f81f7"><Promotion /></el-icon>
                   </el-button>
                 </el-tooltip>
-                <el-tooltip content="飞书登录" placement="top" :show-after="300">
-                  <el-button class="third-btn" circle @click="thirdParty('飞书')">
+                <el-tooltip :content="t('login.feishuTip')" placement="top" :show-after="300">
+                  <el-button class="third-btn" circle @click="thirdParty(t('login.name.feishu'))">
                     <el-icon :size="18" color="#3370ff"><Service /></el-icon>
                   </el-button>
                 </el-tooltip>
-                <el-tooltip content="管理员一键登录（调试用）" placement="top" :show-after="300">
-                  <el-button class="third-btn" circle @click="devAdminLogin">
+                <el-tooltip :content="t('login.adminTip')" placement="top" :show-after="300">
+                  <el-button class="third-btn" circle @click="adminLogin">
                     <el-icon :size="18" color="#9333ea"><User /></el-icon>
                   </el-button>
                 </el-tooltip>
@@ -331,28 +354,35 @@ function handleClose() {
             <div v-else-if="view === 'register'" key="register" class="view-pane">
               <el-form ref="regFormRef" :model="regForm" :rules="regRules" @submit.prevent>
                 <el-form-item prop="username">
-                  <el-input v-model="regForm.username" class="login-field" placeholder="用户名" clearable>
+                  <el-input v-model="regForm.username" class="login-field" :placeholder="t('login.usernameField')" clearable>
                     <template #prefix>
                       <el-icon :size="15"><User /></el-icon>
                     </template>
                   </el-input>
                 </el-form-item>
                 <el-form-item prop="phone">
-                  <el-input v-model="regForm.phone" class="login-field" placeholder="手机号（用于找回密码）" maxlength="11" clearable>
+                  <el-input v-model="regForm.phone" class="login-field" :placeholder="t('login.phonePlaceholder')" maxlength="11" clearable>
                     <template #prefix>
                       <el-icon :size="15"><Iphone /></el-icon>
                     </template>
                   </el-input>
                 </el-form-item>
+                <el-form-item prop="code">
+                  <el-input v-model="regForm.code" class="login-field" :placeholder="t('login.codePlaceholder')" maxlength="6" clearable>
+                    <template #prefix>
+                      <el-icon :size="15"><ChatDotRound /></el-icon>
+                    </template>
+                  </el-input>
+                </el-form-item>
                 <el-form-item prop="password">
-                  <el-input v-model="regForm.password" class="login-field" type="password" placeholder="密码（至少 6 位）" show-password>
+                  <el-input v-model="regForm.password" class="login-field" type="password" :placeholder="t('login.passwordMinPlaceholder')" show-password>
                     <template #prefix>
                       <el-icon :size="15"><Lock /></el-icon>
                     </template>
                   </el-input>
                 </el-form-item>
                 <el-form-item prop="confirm">
-                  <el-input v-model="regForm.confirm" class="login-field" type="password" placeholder="确认密码" show-password @keyup.enter="handleRegister">
+                  <el-input v-model="regForm.confirm" class="login-field" type="password" :placeholder="t('login.confirmPlaceholder')" show-password @keyup.enter="handleRegister">
                     <template #prefix>
                       <el-icon :size="15"><Lock /></el-icon>
                     </template>
@@ -360,29 +390,29 @@ function handleClose() {
                 </el-form-item>
               </el-form>
 
-              <el-button class="login-btn" type="primary" size="large" @click="handleRegister">注册</el-button>
+              <el-button class="login-btn" type="primary" size="large" @click="handleRegister">{{ t('login.registerBtn') }}</el-button>
             </div>
 
             <!-- 忘记密码 -->
             <div v-else key="forgot" class="view-pane">
-              <p class="forgot-tip">验证注册时的账号与手机号后即可重置密码。</p>
+              <p class="forgot-tip">{{ t('login.forgotTip') }}</p>
               <el-form ref="forgotFormRef" :model="forgotForm" :rules="forgotRules" @submit.prevent>
                 <el-form-item prop="username">
-                  <el-input v-model="forgotForm.username" class="login-field" placeholder="账号" clearable>
+                  <el-input v-model="forgotForm.username" class="login-field" :placeholder="t('login.accountPlaceholder')" clearable>
                     <template #prefix>
                       <el-icon :size="15"><User /></el-icon>
                     </template>
                   </el-input>
                 </el-form-item>
                 <el-form-item prop="phone">
-                  <el-input v-model="forgotForm.phone" class="login-field" placeholder="注册手机号" maxlength="11" clearable>
+                  <el-input v-model="forgotForm.phone" class="login-field" :placeholder="t('login.regPhonePlaceholder')" maxlength="11" clearable>
                     <template #prefix>
                       <el-icon :size="15"><Iphone /></el-icon>
                     </template>
                   </el-input>
                 </el-form-item>
                 <el-form-item prop="password">
-                  <el-input v-model="forgotForm.password" class="login-field" type="password" placeholder="新密码（至少 6 位）" show-password @keyup.enter="handleReset">
+                  <el-input v-model="forgotForm.password" class="login-field" type="password" :placeholder="t('login.newPasswordPlaceholder')" show-password @keyup.enter="handleReset">
                     <template #prefix>
                       <el-icon :size="15"><Lock /></el-icon>
                     </template>
@@ -390,7 +420,7 @@ function handleClose() {
                 </el-form-item>
               </el-form>
 
-              <el-button class="login-btn" type="primary" size="large" @click="handleReset">重置密码</el-button>
+              <el-button class="login-btn" type="primary" size="large" @click="handleReset">{{ t('login.resetBtn') }}</el-button>
             </div>
           </transition>
         </div>
@@ -480,21 +510,21 @@ function handleClose() {
   align-items: center;
   justify-content: space-between;
   height: 40px;
-  padding: 0 10px;
+  padding: 0 12px;
   flex-shrink: 0;
 }
 
 .login-brand {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding-left: 6px;
+  gap: 8px;
+  padding-left: 8px;
 }
 
 .brand-logo {
   width: 20px;
   height: 20px;
-  border-radius: 5px;
+  border-radius: 4px;
 }
 
 .brand-name {
@@ -591,7 +621,7 @@ function handleClose() {
 }
 
 .quote-author {
-  margin: 14px 0 0;
+  margin: 16px 0 0;
   font-size: 13px;
   color: var(--text-3);
 }
@@ -612,12 +642,12 @@ function handleClose() {
   margin-top: 16px;
 }
 
-/* 视觉保持 14×4，命中区通过 padding + background-clip 扩大到 22×24 */
+/* 视觉保持 16×4，命中区通过 padding + background-clip 扩大到 24×24 */
 .dot {
-  width: 14px;
+  width: 16px;
   height: 4px;
   padding: 10px 4px;
-  border-radius: 2px;
+  border-radius: 999px;
   background: rgba(31, 35, 41, 0.14);
   background-clip: content-box;
   cursor: pointer;
@@ -642,7 +672,7 @@ function handleClose() {
   background: var(--panel);
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
-  padding: 24px 28px 22px;
+  padding: 24px 28px 24px;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -730,8 +760,8 @@ function handleClose() {
 }
 
 .view-pane :deep(.el-input__inner) {
-  height: 22px;
-  line-height: 22px;
+  height: 24px;
+  line-height: 24px;
 }
 
 .view-pane :deep(.el-input__prefix),
@@ -740,13 +770,13 @@ function handleClose() {
 }
 
 .view-pane :deep(.el-form-item__error) {
-  padding-top: 3px;
+  padding-top: 4px;
 }
 
 .options {
   display: flex;
   gap: 20px;
-  margin: 2px 0 14px;
+  margin: 4px 0 16px;
   height: 24px;
   align-items: center;
 }
@@ -758,12 +788,12 @@ function handleClose() {
 
 .login-btn {
   width: 100%;
-  height: 42px;
+  height: 40px;
   border-radius: 8px;
   font-size: 14px;
   letter-spacing: 6px;
   text-indent: 6px;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 .forgot {
@@ -781,7 +811,7 @@ function handleClose() {
 }
 
 .third-divider {
-  margin: 18px 0 0;
+  margin: 16px 0 0;
 }
 
 .third-divider :deep(.el-divider__text) {
@@ -794,9 +824,9 @@ function handleClose() {
 .third-list {
   display: flex;
   justify-content: center;
-  gap: 14px;
+  gap: 16px;
   margin-top: 24px;
-  padding-bottom: 2px;
+  padding-bottom: 0;
 }
 
 .third-btn {

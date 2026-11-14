@@ -22,7 +22,7 @@ Chrome 按注册表 `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.leafrp
 找到 `com.leafrpa.browser.json`，再由其中的 `path` 启动 `leaf_host.bat`。
 宿主独占 `127.0.0.1:19836` 提供 HTTP 接口，桌面端通过该端口下发指令。
 
-> ⚠️ 桌面端**不会**再自行启动宿主进程。若自行 spawn，会抢占 19836 端口，
+> 【注意】桌面端**不会**再自行启动宿主进程。若自行 spawn，会抢占 19836 端口，
 > 导致 Chrome 的宿主绑定失败、native 管道断开，表现为「插件永远连不上」。
 
 ## 安装（首次使用）

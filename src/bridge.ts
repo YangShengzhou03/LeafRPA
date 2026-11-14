@@ -1,7 +1,13 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import type { Flow, FlowMeta } from './types'
 
 const hasTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
+/** 是否运行在 Tauri 环境（触发器调度等按环境分流） */
+export function isTauri(): boolean {
+  return hasTauri
+}
 
 const LS_KEY = 'leaf-rpa.flows.v1'
 
@@ -159,4 +165,44 @@ export function clearLocalData(): void {
   Object.keys(localStorage)
     .filter((key) => key.startsWith('leaf-rpa.'))
     .forEach((key) => localStorage.removeItem(key))
+}
+
+/* ---------- 触发器（Rust 侧常驻调度） ---------- */
+
+export interface BridgeTrigger {
+  id: string
+  name: string
+  kind: string
+  flow: string
+  flowId: string
+  enabled: boolean
+  time: string
+  interval: number
+  lastRun: string
+  lastRunAt: number
+}
+
+/** 读取 Rust 侧持久化的触发器列表（浏览器环境返回空） */
+export async function getTriggers(): Promise<BridgeTrigger[]> {
+  if (hasTauri) return invoke<BridgeTrigger[]>('get_triggers')
+  return []
+}
+
+/** 全量保存触发器到 Rust 侧（浏览器环境忽略） */
+export async function saveTriggers(list: BridgeTrigger[]): Promise<void> {
+  if (hasTauri) return invoke<void>('save_triggers', { triggers: list })
+}
+
+/** 上报本地时区偏移（分钟，-Date.getTimezoneOffset()） */
+export async function setTzOffset(minutes: number): Promise<void> {
+  if (hasTauri) return invoke<void>('set_tz_offset', { offsetMinutes: minutes })
+}
+
+/** 订阅 Rust 调度线程的到期事件，返回取消订阅函数 */
+export function onTriggerDue(handler: (t: BridgeTrigger) => void): () => void {
+  if (!hasTauri) return () => {}
+  const unlisten = listen<BridgeTrigger>('trigger-due', (event) => handler(event.payload))
+  return () => {
+    void unlisten.then((fn) => fn())
+  }
 }

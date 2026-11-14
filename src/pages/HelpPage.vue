@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import PageShell from '../components/PageShell.vue'
+import { t } from '../i18n'
 
 const keyword = ref('')
 const activeNames = ref<string[]>(['快速上手'])
@@ -70,7 +71,7 @@ const filtered = computed(() => {
 </script>
 
 <template>
-  <PageShell title="帮助中心" kicker="使用指南" sub="常见问题解答与使用指南">
+  <PageShell :title="t('help.title')" :kicker="t('help.kicker')" :sub="t('help.sub')">
     <div class="help-layout">
       <div class="help-main">
         <template v-if="filtered.length">
@@ -78,7 +79,7 @@ const filtered = computed(() => {
             <div class="sec-card-head">
               <h2 class="sec-title">{{ g }}</h2>
               <span class="sec-meta">
-                {{ filtered.filter((x) => x.group === g).length }} 个问题
+                {{ t('help.questionCount', { n: filtered.filter((x) => x.group === g).length }) }}
               </span>
             </div>
             <el-collapse v-model="activeNames" class="faq-collapse">
@@ -96,13 +97,13 @@ const filtered = computed(() => {
         <el-empty
           v-else
           :image-size="96"
-          description="没有找到匹配的问题，换个关键词试试"
+          :description="t('help.empty')"
         />
       </div>
 
       <aside class="help-side">
         <div class="help-search">
-          <el-input v-model="keyword" placeholder="搜索问题关键词" clearable>
+          <el-input v-model="keyword" :placeholder="t('help.searchPlaceholder')" clearable>
             <template #prefix>
               <el-icon><Search /></el-icon>
             </template>
@@ -110,15 +111,15 @@ const filtered = computed(() => {
         </div>
 
         <section class="sec-card">
-          <h2 class="sec-title">使用统计</h2>
+          <h2 class="sec-title">{{ t('help.statsTitle') }}</h2>
           <div class="sec-rows">
             <div class="sec-row">
-              <span class="sec-row-label">常见问题</span>
-              <span class="sec-row-value">{{ faqs.length }} 篇</span>
+              <span class="sec-row-label">{{ t('help.faqLabel') }}</span>
+              <span class="sec-row-value">{{ t('help.countArticles', { n: faqs.length }) }}</span>
             </div>
             <div class="sec-row">
-              <span class="sec-row-label">问题分组</span>
-              <span class="sec-row-value">{{ groups.length }} 个</span>
+              <span class="sec-row-label">{{ t('help.groupLabel') }}</span>
+              <span class="sec-row-value">{{ t('help.countGroups', { n: groups.length }) }}</span>
             </div>
           </div>
         </section>
@@ -143,7 +144,7 @@ const filtered = computed(() => {
 }
 
 .faq-group {
-  padding-bottom: 6px;
+  padding-bottom: 8px;
 }
 
 .faq-collapse {

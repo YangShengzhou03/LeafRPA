@@ -2,6 +2,7 @@
 
 pub mod commands;
 pub mod python;
+pub mod triggers;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -29,6 +30,8 @@ pub fn run() {
             commands::ensure_flows_dir(&handle)?;
             // 元素编辑器窗口的数据共享状态
             app.manage(commands::ElementEditorState::default());
+            // 触发器常驻调度线程（每 5 秒扫描，到期发 trigger-due 事件）
+            triggers::start(&handle);
 
             // 系统托盘：显示主界面 / 退出
             let show = MenuItem::with_id(app, "show", "显示主界面", true, None::<&str>)?;
@@ -94,6 +97,9 @@ pub fn run() {
             commands::take_element_editor_data,
             commands::open_element_editor,
             commands::close_element_editor,
+            triggers::get_triggers,
+            triggers::save_triggers,
+            triggers::set_tz_offset,
             python::run_python_code,
             python::launch_chrome,
         ])

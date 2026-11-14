@@ -11,6 +11,9 @@
     "tauri": "tauri",
     "setup-python": "node scripts/setup-python.mjs",
     "verify:plugin": "node scripts/verify-content.cjs",
+    "check:emoji": "node scripts/check-emoji.mjs",
+    "check:emoji:log": "node scripts/check-emoji.mjs --log",
+    "hooks:install": "git config core.hooksPath .githooks",
     "lint": "vue-tsc --noEmit --strict",
     "lint:rust": "cd src-tauri && cargo clippy --lib -- -W clippy::all -W clippy::pedantic -W clippy::nursery -D warnings",
     "lint:all": "npm run build && npm run lint && npm run lint:rust",
@@ -28,6 +31,8 @@
     "@types/node": "^26.6.6",
     "@vitejs/plugin-vue": "^6.0.10",
     "typescript": "^5.9.3",
+    "unplugin-auto-import": "^21.1.0",
+    "unplugin-vue-components": "^32.1.0",
     "vite": "^8.3.6",
     "vue-tsc": "^3.3.14"
   }

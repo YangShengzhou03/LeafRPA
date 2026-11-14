@@ -12,6 +12,7 @@ import {
   payloadOfElement,
 } from '../element-editor'
 import { toastError, toastSuccess, toastWarning } from '../notify'
+import { t, type MessageKey } from '../i18n'
 
 const store = useAppStore()
 
@@ -19,13 +20,13 @@ type TabKey = 'elements' | 'images' | 'errors' | 'logs' | 'table' | 'drag'
 const active = ref<TabKey>('logs')
 const listRef = ref<HTMLElement | null>(null)
 
-const tabs: { key: TabKey; label: string; dot?: boolean }[] = [
-  { key: 'elements', label: '元素库' },
-  { key: 'images', label: '图像库' },
-  { key: 'errors', label: '错误列表', dot: true },
-  { key: 'logs', label: '运行日志' },
-  { key: 'table', label: '数据表格' },
-  { key: 'drag', label: '流程参数' },
+const tabs: { key: TabKey; label: MessageKey; dot?: boolean }[] = [
+  { key: 'elements', label: 'designer.tabElements' },
+  { key: 'images', label: 'designer.tabImages' },
+  { key: 'errors', label: 'designer.tabErrors', dot: true },
+  { key: 'logs', label: 'designer.tabLogs' },
+  { key: 'table', label: 'designer.tabTable' },
+  { key: 'drag', label: 'designer.tabParams' },
 ]
 
 function setTab(key: string | number) {
@@ -104,10 +105,10 @@ async function pickFromPage() {
     })
     if (el) {
       captureName.value = el.name
-      toastSuccess(`已加入元素库：{{${el.name}}}`, { title: '抓取成功', duration: 2200 })
+      toastSuccess(`${t('designer.addedToLib')}{{${el.name}}}`, { title: t('designer.pickOk'), duration: 2200 })
     }
   } catch (e) {
-    toastError((e as Error).message, { title: '抓取失败' })
+    toastError((e as Error).message, { title: t('designer.pickFail') })
   } finally {
     picking.value = false
   }
@@ -116,7 +117,7 @@ async function pickFromPage() {
 async function captureElement() {
   const selector = captureSelector.value.trim()
   if (!selector) {
-    toastWarning('请输入元素选择器', { title: '选择器为空' })
+    toastWarning(t('designer.selectorRequired'), { title: t('designer.selectorEmpty') })
     return
   }
   capturing.value = true
@@ -136,15 +137,15 @@ async function captureElement() {
       url: info?.url,
     })
     if (!el) {
-      toastWarning('选择器为空，未加入元素库', { title: '保存失败' })
+      toastWarning(t('designer.selectorEmptySave'), { title: t('designer.saveFail') })
       return
     }
     captureName.value = el.name
     captureSelector.value = ''
     captureVisible.value = false
-    toastSuccess(`元素已存为元素变量 {{${el.name}}}`, { title: '采集成功', duration: 2200 })
+    toastSuccess(`${t('designer.savedAsVar')}{{${el.name}}}`, { title: t('designer.captureOk'), duration: 2200 })
   } catch (e) {
-    toastError((e as Error).message, { title: '采集失败' })
+    toastError((e as Error).message, { title: t('designer.captureFail') })
   } finally {
     capturing.value = false
   }
@@ -153,8 +154,8 @@ async function captureElement() {
 /** 复制元素引用 {{name}}，便于在指令参数里直接粘贴 */
 async function copyRef(el: { name: string }) {
   const ok = await copyText(`{{${el.name}}}`)
-  if (ok) toastSuccess(`已复制 {{${el.name}}}`, { title: '已复制引用', duration: 1800 })
-  else toastWarning('复制失败，请手动输入引用', { title: '复制失败' })
+  if (ok) toastSuccess(`${t('designer.refCopied')}{{${el.name}}}`, { title: t('designer.refCopiedTitle'), duration: 1800 })
+  else toastWarning(t('designer.refCopyFailed'), { title: t('designer.copyFail') })
 }
 
 function removeElement(id: string) {
@@ -166,9 +167,9 @@ async function clearElements() {
   if (!elements.value.length) return
   try {
     await ElMessageBox.confirm(
-      `确定清空元素库？将移除 ${elements.value.length} 个元素及其对应的元素变量，已引用这些变量的指令会失效。`,
-      '清空元素库',
-      { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' },
+      t('designer.clearElementsConfirm', { n: elements.value.length }),
+      t('designer.clearElements'),
+      { type: 'warning', confirmButtonText: t('designer.clear'), cancelButtonText: t('common.cancel') },
     )
   } catch {
     return
@@ -178,7 +179,7 @@ async function clearElements() {
   store.selectedElementId = null
   saveElements([])
   names.forEach((n) => store.removeGlobalVar(n))
-  toastSuccess('元素库已清空', { title: '已清空' })
+  toastSuccess(t('designer.elementsCleared'), { title: t('designer.cleared') })
 }
 
 /** 重命名：元素库面板内联编辑 */
@@ -219,7 +220,7 @@ async function openEditor(el?: CapturedElement) {
     try {
       await openElementEditor(payloadOfElement(el))
     } catch (e) {
-      toastError((e as Error).message, { title: '打开元素编辑器失败' })
+      toastError((e as Error).message, { title: t('designer.editorOpenFail') })
     }
     return
   }
@@ -236,7 +237,7 @@ async function openEditor(el?: CapturedElement) {
       title: draftSource.value?.title,
     })
   } catch (e) {
-    toastError((e as Error).message, { title: '打开元素编辑器失败' })
+    toastError((e as Error).message, { title: t('designer.editorOpenFail') })
   }
 }
 
@@ -265,7 +266,7 @@ onMounted(async () => {
       if (res.text) el.text = res.text
       saveElements(store.elements)
       store.syncElementVars()
-      toastSuccess(`已更新元素：${name}`, { title: '已保存', duration: 1800 })
+      toastSuccess(t('designer.elementUpdated', { name }), { title: t('designer.savedOk'), duration: 1800 })
       return
     }
 
@@ -278,7 +279,7 @@ onMounted(async () => {
       url: draftSource.value?.url,
       title: draftSource.value?.title,
     })
-    if (created) toastSuccess(`已加入元素库：${created.name}`, { title: '已保存', duration: 1800 })
+    if (created) toastSuccess(t('designer.addedToLibName', { name: created.name }), { title: t('designer.savedOk'), duration: 1800 })
   })
 })
 
@@ -383,7 +384,10 @@ function saveFlag(key: string, value: boolean) {
 const collapsed = ref(loadFlag(COLLAPSED_KEY))
 const closed = ref(loadFlag(CLOSED_KEY))
 
-const activeLabel = computed(() => tabs.find((t) => t.key === active.value)?.label ?? '')
+const activeLabel = computed(() => {
+  const tab = tabs.find((item) => item.key === active.value)
+  return tab ? t(tab.label) : ''
+})
 
 function collapsePanel() {
   if (collapsed.value) return
@@ -412,10 +416,10 @@ function openPanel() {
 async function clearLogs() {
   if (!store.logs.length) return
   try {
-    await ElMessageBox.confirm('确定清空全部运行日志？', '清空日志', {
+    await ElMessageBox.confirm(t('designer.clearLogsConfirm'), t('designer.clearLogsTitle'), {
       type: 'warning',
-      confirmButtonText: '清空',
-      cancelButtonText: '取消',
+      confirmButtonText: t('designer.clear'),
+      cancelButtonText: t('common.cancel'),
     })
   } catch {
     return
@@ -433,7 +437,7 @@ onBeforeUnmount(() => {
   <div
     v-if="!closed"
     class="bottom-panel"
-    :style="{ height: collapsed ? '38px' : panelHeight + 'px' }"
+    :style="{ height: collapsed ? '40px' : panelHeight + 'px' }"
   >
     <div
       v-if="!collapsed"
@@ -441,7 +445,7 @@ onBeforeUnmount(() => {
       :class="{ dragging }"
       role="separator"
       tabindex="0"
-      title="拖拽调整高度，双击恢复默认"
+      :title="t('designer.resizeTip')"
       @mousedown="onHandleDown"
       @dblclick="resetHeight"
       @keydown="onHandleKeydown"
@@ -450,7 +454,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="bottom-head">
-      <el-tooltip v-if="collapsed" content="展开面板" placement="bottom" :show-after="300">
+      <el-tooltip v-if="collapsed" :content="t('designer.expand')" placement="bottom" :show-after="300">
         <el-button class="collapsed-tab" text @click="expandPanel">
           <el-icon :size="13"><Plus /></el-icon>
           {{ activeLabel }}
@@ -458,21 +462,21 @@ onBeforeUnmount(() => {
       </el-tooltip>
       <template v-else>
         <el-tabs class="bp-tabs" :model-value="active" @update:model-value="setTab">
-          <el-tab-pane v-for="t in tabs" :key="t.key" :name="t.key">
+          <el-tab-pane v-for="tab in tabs" :key="tab.key" :name="tab.key">
             <template #label>
-              <el-badge v-if="t.dot" is-dot class="bp-dot-badge">{{ t.label }}</el-badge>
-              <span v-else>{{ t.label }}</span>
+              <el-badge v-if="tab.dot" is-dot class="bp-dot-badge">{{ t(tab.label) }}</el-badge>
+              <span v-else>{{ t(tab.label) }}</span>
             </template>
           </el-tab-pane>
         </el-tabs>
-        <el-button v-if="active === 'logs'" class="head-btn" text @click="clearLogs">清空</el-button>
+        <el-button v-if="active === 'logs'" class="head-btn" text @click="clearLogs">{{ t('designer.clear') }}</el-button>
         <span class="deco">
-          <el-tooltip content="折叠面板" placement="bottom" :show-after="300">
+          <el-tooltip :content="t('designer.collapse')" placement="bottom" :show-after="300">
             <el-button class="deco-btn" text circle @click="collapsePanel">
               <el-icon :size="14"><Minus /></el-icon>
             </el-button>
           </el-tooltip>
-          <el-tooltip content="关闭面板" placement="bottom" :show-after="300">
+          <el-tooltip :content="t('designer.closePanel')" placement="bottom" :show-after="300">
             <el-button class="deco-btn" text circle @click="closePanel">
               <el-icon :size="14"><Close /></el-icon>
             </el-button>
@@ -486,7 +490,7 @@ onBeforeUnmount(() => {
         <div ref="listRef" class="log-scroll">
           <el-empty
             v-if="store.logs.length === 0"
-            description="暂无日志，运行流程后在此显示输出。"
+            :description="t('designer.logsEmpty')"
             :image-size="72"
           />
           <div v-for="(line, i) in store.logs" :key="i" class="log-line" :class="line.level">
@@ -501,7 +505,7 @@ onBeforeUnmount(() => {
           <!-- 左：按来源页面分组的元素树 -->
           <div class="ele-tree">
             <div v-if="elements.length === 0" class="ele-tree-empty">
-              <el-empty description="暂无元素，点击右上角「捕获新元素」开始采集" :image-size="64" />
+              <el-empty :description="t('designer.elementsEmpty')" :image-size="64" />
             </div>
             <template v-else>
               <div v-for="g in elementGroups" :key="g.group.id" class="ele-group">
@@ -528,7 +532,6 @@ onBeforeUnmount(() => {
                     <template v-if="renamingId === el.id">
                       <el-input
                         v-model="renameValue"
-                        size="small"
                         class="ele-rename"
                         @click.stop
                         @keyup.enter="confirmRename"
@@ -556,11 +559,11 @@ onBeforeUnmount(() => {
             <div class="ele-detail-head">
               <el-button class="head-btn" @click="openEditor()">
                 <el-icon :size="12"><Plus /></el-icon>
-                捕获新元素
+                {{ t('designer.captureNew') }}
               </el-button>
               <el-button class="head-btn" :disabled="!selectedElement" @click="openEditor(selectedElement!)">
                 <el-icon :size="12"><EditPen /></el-icon>
-                编辑元素
+                {{ t('designer.editElement') }}
               </el-button>
               <el-dropdown trigger="click" class="ele-detail-more">
                 <el-button class="deco-btn" text>
@@ -569,10 +572,10 @@ onBeforeUnmount(() => {
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item @click="captureVisible = !captureVisible">
-                      手动填写选择器
+                      {{ t('designer.manualSelector') }}
                     </el-dropdown-item>
                     <el-dropdown-item :disabled="!elements.length" @click="clearElements">
-                      清空元素库
+                      {{ t('designer.clearElements') }}
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -582,36 +585,36 @@ onBeforeUnmount(() => {
             <!-- 采集表单 -->
             <div v-if="captureVisible" class="ele-capture">
               <div class="cap-field">
-                <label>元素选择器（CSS / XPath）</label>
+                <label>{{ t('designer.labelSelector') }}</label>
                 <div class="cap-pick-row">
                   <el-input
                     v-model="captureSelector"
-                    placeholder="例如 #submit-btn 或 //button[@id='submit']"
+                    :placeholder="t('designer.selectorPlaceholder')"
                     clearable
                     @keyup.enter="captureElement"
                   />
                   <el-button :loading="picking" @click="pickFromPage">
                     <el-icon :size="12"><Position /></el-icon>
-                    抓取
+                    {{ t('designer.pick') }}
                   </el-button>
                 </div>
               </div>
               <div class="cap-field">
-                <label>元素变量名</label>
+                <label>{{ t('designer.labelVarName') }}</label>
                 <el-input
                   v-model="captureName"
-                  placeholder="留空则根据元素文本自动命名"
+                  :placeholder="t('designer.varNameHint')"
                   clearable
                   @keyup.enter="captureElement"
                 />
               </div>
               <p class="capture-tip">
-                抓取会在浏览器中校验元素是否存在，需要已安装并连接轻羽浏览器插件；保存后可在任意输入框的 fx 中选择该元素变量。
+                {{ t('designer.captureTip') }}
               </p>
               <div class="cap-actions">
-                <el-button @click="captureVisible = false">取消</el-button>
+                <el-button @click="captureVisible = false">{{ t('common.cancel') }}</el-button>
                 <el-button type="primary" :loading="capturing" @click="captureElement">
-                  校验并保存
+                  {{ t('designer.validateSave') }}
                 </el-button>
               </div>
             </div>
@@ -620,29 +623,29 @@ onBeforeUnmount(() => {
             <div v-else-if="selectedElement" class="ele-info">
               <div class="ei-head">
                 <span class="ei-title" :title="selectedElement.name">{{ selectedElement.name }}</span>
-                <span class="ei-tag">元素变量</span>
+                <span class="ei-tag">{{ t('designer.elementVar') }}</span>
               </div>
               <div class="ei-grid">
-                <span class="ei-k">引用</span>
+                <span class="ei-k">{{ t('designer.kRef') }}</span>
                 <div class="ei-v">
                   <code class="ei-code">{{ refText }}</code>
-                  <el-tooltip content="复制引用" placement="top" :show-after="300">
+                  <el-tooltip :content="t('designer.copyRef')" placement="top" :show-after="300">
                     <button class="ei-act" @click="copyRef(selectedElement)">
                       <el-icon :size="12"><DocumentCopy /></el-icon>
                     </button>
                   </el-tooltip>
                 </div>
 
-                <span class="ei-k">标签</span>
+                <span class="ei-k">{{ t('designer.kTag') }}</span>
                 <div class="ei-v">
                   <span v-if="selectedElement.tagName">&lt;{{ selectedElement.tagName }}&gt;</span>
                   <span v-else class="ei-muted">—</span>
                   <span v-if="selectedElement.similarCount && selectedElement.similarCount > 1" class="ei-similar">
-                    相似元素 {{ selectedElement.similarCount }} 个
+                    {{ t('designer.similar', { n: selectedElement.similarCount }) }}
                   </span>
                 </div>
 
-                <span class="ei-k">文本</span>
+                <span class="ei-k">{{ t('designer.kText') }}</span>
                 <div class="ei-v">
                   <span v-if="selectedElement.text" class="ei-ellipsis" :title="selectedElement.text">
                     {{ selectedElement.text }}
@@ -665,26 +668,26 @@ onBeforeUnmount(() => {
                   <span v-else class="ei-muted">—</span>
                 </div>
 
-                <span class="ei-k">来源</span>
+                <span class="ei-k">{{ t('designer.kSource') }}</span>
                 <div class="ei-v">
                   <span v-if="selectedElement.url" class="ei-ellipsis" :title="selectedElement.url">
                     {{ selectedElement.title || selectedElement.url }}
                   </span>
-                  <span v-else class="ei-muted">未知页面</span>
+                  <span v-else class="ei-muted">{{ t('designer.unknownPage') }}</span>
                 </div>
               </div>
               <div class="ei-actions">
-                <el-button size="small" @click="startRename(selectedElement)">
+                <el-button @click="startRename(selectedElement)">
                   <el-icon :size="12"><EditPen /></el-icon>
-                  重命名
+                  {{ t('designer.rename') }}
                 </el-button>
-                <el-button size="small" @click="copyRef(selectedElement)">
+                <el-button @click="copyRef(selectedElement)">
                   <el-icon :size="12"><DocumentCopy /></el-icon>
-                  复制引用
+                  {{ t('designer.copyRef') }}
                 </el-button>
-                <el-button size="small" type="danger" plain @click="removeElement(selectedElement.id)">
+                <el-button type="danger" plain @click="removeElement(selectedElement.id)">
                   <el-icon :size="12"><Delete /></el-icon>
-                  删除
+                  {{ t('common.delete') }}
                 </el-button>
               </div>
             </div>
@@ -692,7 +695,7 @@ onBeforeUnmount(() => {
             <!-- 未选中元素 -->
             <div v-else class="ele-empty">
               <el-empty
-                :description="elements.length ? '在左侧选择元素查看详情' : '捕获到的页面元素会出现在这里'"
+                :description="elements.length ? t('designer.selectLeft') : t('designer.capturedHere')"
                 :image-size="64"
               />
             </div>
@@ -702,7 +705,7 @@ onBeforeUnmount(() => {
 
       <template v-else>
         <el-empty
-          :description="active === 'images' ? '暂无图像' : active === 'errors' ? '暂无错误列表' : active === 'table' ? '暂无数据表格' : '暂无流程参数'"
+          :description="active === 'images' ? t('designer.noImages') : active === 'errors' ? t('designer.noErrors') : active === 'table' ? t('designer.tabTable') + ' ' + t('designer.emptyValue') : t('designer.noParams')"
           :image-size="70"
         />
       </template>
@@ -710,10 +713,10 @@ onBeforeUnmount(() => {
 
   </div>
 
-  <el-tooltip v-else content="打开底部面板" placement="top" :show-after="300">
+  <el-tooltip v-else :content="t('designer.openPanel')" placement="top" :show-after="300">
     <el-button class="reopen-panel" round @click="openPanel">
       <el-icon :size="16"><ArrowUp /></el-icon>
-      面板
+      {{ t('designer.panel') }}
     </el-button>
   </el-tooltip>
 </template>
@@ -765,8 +768,8 @@ onBeforeUnmount(() => {
 
 .bp-grip {
   width: 44px;
-  height: 3px;
-  border-radius: 2px;
+  height: 4px;
+  border-radius: 999px;
   background: var(--border);
   transition: background 0.15s;
 }
@@ -832,7 +835,7 @@ onBeforeUnmount(() => {
 
 /* 头部小按钮（清空/添加新元素）尺寸收敛 */
 .head-btn {
-  height: 26px;
+  height: 24px;
   padding: 0 8px;
   font-size: 12px;
   margin-right: 8px;
@@ -841,7 +844,7 @@ onBeforeUnmount(() => {
 .deco {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
 }
 
 .deco-btn {
@@ -851,7 +854,7 @@ onBeforeUnmount(() => {
 }
 
 .collapsed-tab {
-  height: 26px;
+  height: 24px;
   padding: 0 8px;
   font-size: 13px;
   font-weight: 500;
@@ -876,7 +879,7 @@ onBeforeUnmount(() => {
 .log-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 14px;
+  padding: 8px 16px;
   font-family: 'Cascadia Code', Consolas, monospace;
   font-size: 12px;
   line-height: 1.9;
@@ -884,7 +887,7 @@ onBeforeUnmount(() => {
 
 .log-line .time {
   color: var(--text-3);
-  margin-right: 10px;
+  margin-right: 12px;
 }
 
 .log-line.info .msg { color: var(--text-2); }
@@ -906,7 +909,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 6px 8px;
+  padding: 8px;
   border-right: 1px solid var(--border);
 }
 
@@ -918,18 +921,18 @@ onBeforeUnmount(() => {
 }
 
 .ele-group + .ele-group {
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 .ele-group-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  padding: 6px 6px;
+  padding: 4px 8px;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text);
   font-size: 13px;
   text-align: left;
@@ -966,22 +969,22 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   font-size: 11px;
   color: var(--text-3);
-  padding: 0 5px;
+  padding: 0 4px;
   border-radius: 999px;
   background: var(--panel);
 }
 
 .ele-group-body {
-  padding-left: 14px;
+  padding-left: 16px;
 }
 
 /* 元素行 */
 .ele-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 6px;
-  border-radius: 6px;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 8px;
   cursor: pointer;
   user-select: none;
 }
@@ -1035,12 +1038,12 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  padding: 8px 10px;
+  padding: 8px 12px;
 }
 
 .ele-detail-head .head-btn {
-  height: 30px;
-  padding: 0 10px;
+  height: 32px;
+  padding: 0 12px;
   font-size: 13px;
   color: var(--accent);
   border-color: var(--border);
@@ -1079,7 +1082,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .ei-title {
@@ -1098,15 +1101,15 @@ onBeforeUnmount(() => {
   background: var(--var-elem-bg);
   border: 1px solid var(--var-elem-border);
   border-radius: 999px;
-  padding: 0 6px;
-  line-height: 17px;
+  padding: 0 8px;
+  line-height: 16px;
 }
 
 .ei-grid {
   display: grid;
   grid-template-columns: 52px 1fr;
   row-gap: 8px;
-  column-gap: 10px;
+  column-gap: 12px;
   align-items: center;
   font-size: 12px;
 }
@@ -1118,7 +1121,7 @@ onBeforeUnmount(() => {
 .ei-v {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   color: var(--text);
 }
@@ -1129,7 +1132,7 @@ onBeforeUnmount(() => {
   color: var(--var-elem-fg);
   background: var(--var-elem-bg);
   border-radius: 4px;
-  padding: 1px 6px;
+  padding: 0 8px;
   min-width: 0;
 }
 
@@ -1149,7 +1152,7 @@ onBeforeUnmount(() => {
   color: var(--text-3);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 0 6px;
+  padding: 0 8px;
   line-height: 16px;
 }
 
@@ -1175,7 +1178,7 @@ onBeforeUnmount(() => {
 .ei-actions {
   display: flex;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 /* 采集表单 */
@@ -1185,7 +1188,7 @@ onBeforeUnmount(() => {
   padding: 4px 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .cap-field label {
@@ -1197,7 +1200,7 @@ onBeforeUnmount(() => {
 
 .cap-pick-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .cap-pick-row :deep(.el-input) {

@@ -12,6 +12,8 @@ import TutorialView from './components/TutorialView.vue'
 import CommunityView from './components/CommunityView.vue'
 import { useAppStore, type ThemeMode } from './store'
 import { useAuthStore } from './auth'
+import { useTriggerStore, startScheduler, runTriggerNow } from './triggers'
+import { onTriggerDue, setTzOffset, isTauri } from './bridge'
 import SettingsPage from './pages/SettingsPage.vue'
 import ServicePage from './pages/ServicePage.vue'
 import HelpPage from './pages/HelpPage.vue'
@@ -23,6 +25,11 @@ import ToolsPage from './pages/ToolsPage.vue'
 
 const store = useAppStore()
 const auth = useAuthStore()
+const triggerStore = useTriggerStore()
+
+/** 取消触发器事件订阅 / 兜底调度器 */
+let offTriggerDue: (() => void) | null = null
+let stopFallbackScheduler: (() => void) | null = null
 
 /** 设计器视图独占整个窗口（不显示顶栏与应用侧栏） */
 const immersive = computed(
@@ -51,6 +58,8 @@ onMounted(async () => {
   media.addEventListener('change', onMediaChange)
   auth.restoreSession()
   if (!auth.session) return
+  // 校验 token 有效性；服务不可达时保留本地会话（离线可用）
+  void auth.verifySession()
   // 元素库在 store 初始化时从本地读取，这里把历史元素重新同步为元素变量
   store.syncElementVars()
   try {
@@ -59,10 +68,33 @@ onMounted(async () => {
   } catch (err) {
     console.error('init failed', err)
   }
+  // 触发器：Tauri 环境由 Rust 常驻线程调度（事件驱动），浏览器环境用前端兜底调度
+  void triggerStore.load()
+  if (isTauri()) {
+    void setTzOffset(-new Date().getTimezoneOffset())
+    offTriggerDue = onTriggerDue((t) => {
+      void handleDueTrigger(t.id)
+    })
+  } else {
+    stopFallbackScheduler = startScheduler(store, triggerStore)
+  }
 })
+
+/** Rust 调度线程通知触发器到期：更新状态并执行关联流程 */
+async function handleDueTrigger(id: string) {
+  const trigger = triggerStore.triggers.find((t) => t.id === id)
+  if (!trigger || store.running) return
+  trigger.lastRun = new Date().toLocaleString('zh-CN', { hour12: false })
+  trigger.lastRunAt = Date.now()
+  triggerStore.persist()
+  const run = await runTriggerNow(store, trigger)
+  triggerStore.record(run)
+}
 
 onBeforeUnmount(() => {
   media?.removeEventListener('change', onMediaChange)
+  offTriggerDue?.()
+  stopFallbackScheduler?.()
 })
 
 watch(

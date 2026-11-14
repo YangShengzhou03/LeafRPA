@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { VideoPlay, ArrowRight, ArrowLeft } from '@element-plus/icons-vue'
 import { useAppStore } from '../store'
 import { toastSuccess } from '../notify'
+import { t, type MessageKey } from '../i18n'
 
 const store = useAppStore()
 
@@ -16,6 +17,15 @@ interface Tutorial {
 }
 
 const categories = ['全部', '入门', '进阶', '实战']
+
+/** 分类/难度值（用于筛选与持久化）→ 显示文案 */
+const CAT_KEYS: Record<string, MessageKey> = {
+  全部: 'tutorial.cat.all',
+  入门: 'tutorial.cat.basic',
+  进阶: 'tutorial.cat.advanced',
+  实战: 'tutorial.cat.practice',
+}
+const catLabel = (c: string) => t(CAT_KEYS[c] ?? 'tutorial.cat.all')
 
 const tutorials: Tutorial[] = [
   { id: '1', title: '5 分钟创建第一个自动化流程', desc: '从零开始，完成一个网页打开与数据填写的演示流程。', level: '入门', minutes: 5, color: '#3b6fe0' },
@@ -92,8 +102,8 @@ function closeDetail() {
 /** 在设计器中新建一个以该教程命名的流程，边学边练 */
 function practice() {
   if (!detail.value) return
-  store.createAndOpen(`练习：${detail.value.title}`, 'pc')
-  toastSuccess(`已创建练习流程「${detail.value.title}」`, { title: '开始练习', duration: 2600 })
+  store.createAndOpen(t('tutorial.practicePrefix', { title: detail.value.title }), 'pc')
+  toastSuccess(t('tutorial.practiceOk', { title: detail.value.title }), { title: t('tutorial.practiceTitle'), duration: 2600 })
   closeDetail()
 }
 </script>
@@ -103,13 +113,13 @@ function practice() {
     <template v-if="!detailView">
       <div class="page-head">
         <div class="page-head-main">
-          <div class="page-kicker">边学边练</div>
-          <h1 class="page-title">教程</h1>
-          <p class="page-sub">从入门到实战，系统掌握轻羽 RPA</p>
+          <div class="page-kicker">{{ t('tutorial.kicker') }}</div>
+          <h1 class="page-title">{{ t('tutorial.title') }}</h1>
+          <p class="page-sub">{{ t('tutorial.sub') }}</p>
         </div>
         <div class="tut-progress">
           <div class="tut-progress-text">
-            已学 {{ learned.size }} / {{ tutorials.length }}
+            {{ t('tutorial.progress', { done: learned.size, total: tutorials.length }) }}
             <span class="tut-progress-pct">{{ progressPercent }}%</span>
           </div>
           <el-progress :percentage="progressPercent" :stroke-width="8" style="width: 180px" />
@@ -117,42 +127,42 @@ function practice() {
       </div>
 
       <el-radio-group v-model="activeCat" class="cat-group">
-        <el-radio-button v-for="c in categories" :key="c" :value="c">{{ c }}</el-radio-button>
+        <el-radio-button v-for="c in categories" :key="c" :value="c">{{ catLabel(c) }}</el-radio-button>
       </el-radio-group>
 
       <div v-if="filtered.length === 0" class="tut-empty">
-        <el-empty description="该分类下暂无教程，换个分类看看" :image-size="96" />
+        <el-empty :description="t('tutorial.emptyCat')" :image-size="96" />
       </div>
 
       <div v-else class="card-grid">
         <div
-          v-for="t in filtered"
-          :key="t.id"
+          v-for="item in filtered"
+          :key="item.id"
           class="tut-card"
           role="button"
           tabindex="0"
-          @click="openDetail(t)"
-          @keydown.enter="openDetail(t)"
+          @click="openDetail(item)"
+          @keydown.enter="openDetail(item)"
         >
-          <div class="tut-cover" :style="{ background: t.color }">
+          <div class="tut-cover" :style="{ background: item.color }">
             <el-icon :size="18" color="#fff"><VideoPlay /></el-icon>
-            <span class="tut-minutes">{{ t.minutes }} 分钟</span>
+            <span class="tut-minutes">{{ t('tutorial.minutes', { n: item.minutes }) }}</span>
           </div>
           <div class="tut-body">
-            <div class="tut-title">{{ t.title }}</div>
-            <div class="tut-desc">{{ t.desc }}</div>
+            <div class="tut-title">{{ item.title }}</div>
+            <div class="tut-desc">{{ item.desc }}</div>
             <div class="tut-foot">
-              <el-tag :type="levelTag(t.level)" effect="light" round>{{ t.level }}</el-tag>
+              <el-tag :type="levelTag(item.level)" effect="light" round>{{ catLabel(item.level) }}</el-tag>
               <el-tag
-                v-if="learned.has(t.id)"
+                v-if="learned.has(item.id)"
                 type="success"
                 effect="plain"
                 round
               >
-                已学
+                {{ t('tutorial.learned') }}
               </el-tag>
               <span class="tut-link">
-                {{ learned.has(t.id) ? '继续学习' : '开始学习' }}
+                {{ learned.has(item.id) ? t('tutorial.continue') : t('tutorial.start') }}
                 <el-icon :size="13"><ArrowRight /></el-icon>
               </span>
             </div>
@@ -163,7 +173,7 @@ function practice() {
 
     <template v-else-if="detail">
       <div class="detail-nav">
-        <el-button text :icon="ArrowLeft" @click="closeDetail">返回教程</el-button>
+        <el-button text :icon="ArrowLeft" @click="closeDetail">{{ t('tutorial.back') }}</el-button>
       </div>
       <div class="detail-card sec-card">
         <div class="detail-head">
@@ -173,20 +183,20 @@ function practice() {
           <h2 class="detail-title">{{ detail.title }}</h2>
           <div class="detail-meta">
             <el-tag :type="levelTag(detail.level)" effect="light" round>
-              {{ detail.level }}
+              {{ catLabel(detail.level) }}
             </el-tag>
-            <span class="detail-minutes">约 {{ detail.minutes }} 分钟</span>
+            <span class="detail-minutes">{{ t('tutorial.aboutMinutes', { n: detail.minutes }) }}</span>
           </div>
         </div>
         <p class="detail-desc">{{ detail.desc }}</p>
         <p class="detail-note">
-          本教程为示例内容，点击下方按钮即可在设计器中创建配套练习流程，边学边练。
+          {{ t('tutorial.note') }}
         </p>
         <div class="detail-actions">
           <el-button @click="detail && toggleLearned(detail)">
-            {{ detail && learned.has(detail.id) ? '取消已学' : '标记为已学' }}
+            {{ detail && learned.has(detail.id) ? t('tutorial.unmark') : t('tutorial.mark') }}
           </el-button>
-          <el-button type="primary" @click="practice">打开设计器练习</el-button>
+          <el-button type="primary" @click="practice">{{ t('tutorial.practice') }}</el-button>
         </div>
       </div>
     </template>
@@ -198,7 +208,7 @@ function practice() {
 .tut-progress {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   align-items: flex-end;
 }
 
@@ -221,13 +231,13 @@ function practice() {
 .detail-card {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .detail-head {
   display: grid;
   grid-template-columns: auto 1fr;
-  column-gap: 14px;
+  column-gap: 16px;
   align-items: center;
 }
 
@@ -243,7 +253,7 @@ function practice() {
 }
 
 .detail-title {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   font-size: 16px;
   font-weight: 600;
   color: var(--text);
@@ -252,7 +262,7 @@ function practice() {
 .detail-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .detail-minutes {
@@ -269,7 +279,7 @@ function practice() {
 
 .detail-note {
   margin: 0;
-  padding: 10px 12px;
+  padding: 12px;
   font-size: 12px;
   color: var(--text-3);
   line-height: 1.7;

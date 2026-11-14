@@ -42,7 +42,7 @@ if (Test-Path $prefPath) {
             Write-Warning "清单中的 allowed_origins 与该扩展 ID 不一致，Chrome 会拒绝连接宿主！"
             Write-Warning "请把 com.leafrpa.browser.json 里的 allowed_origins 改为 chrome-extension://$id/ 后重新执行本脚本。"
         } else {
-            Write-Host "扩展 ID 与清单一致 ✓" -ForegroundColor Green
+            Write-Host "扩展 ID 与清单一致 [OK]" -ForegroundColor Green
         }
     } else {
         Write-Warning "未在 Chrome 配置中找到 leaf-extension，请先在 chrome://extensions 加载该扩展。"

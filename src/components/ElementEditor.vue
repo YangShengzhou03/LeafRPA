@@ -39,6 +39,7 @@ import {
   type ElementEditorPayload,
 } from '../element-editor'
 import { insertRef } from '../vars'
+import { t, type MessageKey } from '../i18n'
 
 
 type TabKey = 'preview' | 'locate'
@@ -159,12 +160,12 @@ interface AttrRow {
   value: string
 }
 
-const MATCH_OPTIONS: { value: AttrRow['match']; label: string }[] = [
-  { value: 'equals', label: '等于' },
-  { value: 'contains', label: '包含' },
-  { value: 'startsWith', label: '开头是' },
-  { value: 'endsWith', label: '结尾是' },
-  { value: 'regex', label: '正则' },
+const MATCH_OPTIONS: { value: AttrRow['match']; label: MessageKey }[] = [
+  { value: 'equals', label: 'designer.ee.match.equals' },
+  { value: 'contains', label: 'designer.ee.match.contains' },
+  { value: 'startsWith', label: 'designer.ee.match.startsWith' },
+  { value: 'endsWith', label: 'designer.ee.match.endsWith' },
+  { value: 'regex', label: 'designer.ee.match.regex' },
 ]
 
 const rows = ref<AttrRow[]>([])
@@ -349,13 +350,13 @@ const anchorPickerVisible = ref(false)
 function applyAnchor() {
   const text = anchorText.value.trim()
   if (!text) {
-    toastWarning('请先输入锚点文本', { title: '锚点为空' })
+    toastWarning(t('designer.ee.anchorRequired'), { title: t('designer.ee.anchorEmpty') })
     return
   }
   const tag = tree.value.self?.tagName || '*'
   xpathSelector.value = `//${tag}[normalize-space(.)='${xpathQuote(text)}']`
   selectorType.value = 'xpath'
-  toastSuccess('已用锚点文本生成 XPath', { title: '锚点已应用', duration: 1800 })
+  toastSuccess(t('designer.ee.anchorApplied'), { title: t('designer.ee.anchorAppliedTitle'), duration: 1800 })
 }
 
 /* ---------- 操作 ---------- */
@@ -372,9 +373,9 @@ async function rePick() {
     selectorType.value = 'css'
     if (!name.value.trim()) name.value = suggestName(element)
     await loadElement(selector)
-    toastSuccess('已重新捕获元素', { title: '捕获成功', duration: 1800 })
+    toastSuccess(t('designer.ee.recaptureOk'), { title: t('designer.ee.recaptureOkTitle'), duration: 1800 })
   } catch (e) {
-    toastError((e as Error).message, { title: '重新捕获失败' })
+    toastError((e as Error).message, { title: t('designer.ee.recaptureFail') })
   } finally {
     repicking.value = false
   }
@@ -389,7 +390,7 @@ const similarCount = ref(0)
 async function pickSimilar() {
   const selector = activeSelector.value.trim()
   if (!selector) {
-    toastWarning('请先确定一个元素选择器', { title: '缺少选择器' })
+    toastWarning(t('designer.ee.selectorMissing'), { title: t('designer.ee.noSelectorTitle') })
     return
   }
   try {
@@ -398,13 +399,13 @@ async function pickSimilar() {
       | null
     const count = data?.count ?? 0
     if (!count) {
-      toastWarning('未找到相似元素', { title: '无相似元素' })
+      toastWarning(t('designer.ee.noSimilar'), { title: t('designer.ee.noSimilarTitle') })
       return
     }
     similarCount.value = count
-    toastSuccess(`找到 ${count} 个相似元素`, { title: '捕获相似元素', duration: 2200 })
+    toastSuccess(t('designer.ee.similarFound', { n: count }), { title: t('designer.ee.similarTitle'), duration: 2200 })
   } catch (e) {
-    toastError((e as Error).message, { title: '捕获相似元素失败' })
+    toastError((e as Error).message, { title: t('designer.ee.similarFail') })
   }
 }
 
@@ -412,7 +413,7 @@ async function pickSimilar() {
 async function check() {
   const selector = activeSelector.value.trim()
   if (!selector) {
-    toastWarning('请输入或生成选择器', { title: '选择器为空' })
+    toastWarning(t('designer.ee.selectorRequired'), { title: t('designer.selectorEmpty') })
     return
   }
   checking.value = true
@@ -421,11 +422,11 @@ async function check() {
     const res = await validateSelector(selector, selectorType.value, targetTabId.value)
     checkResult.value = res
     if (!res.ok) {
-      toastError('未在页面上匹配到元素，请确认浏览器仍停在该页面', { title: '校验失败', duration: 3000 })
-    } else if (res.unique) toastSuccess('唯一匹配 1 个元素', { title: '校验通过', duration: 1800 })
-    else toastWarning(`匹配到 ${res.count} 个元素，建议增加条件`, { title: '匹配不唯一', duration: 2600 })
+      toastError(t('designer.ee.noMatch'), { title: t('designer.ee.verifyFail'), duration: 3000 })
+    } else if (res.unique) toastSuccess(t('designer.ee.uniqueOk'), { title: t('designer.ee.verifyOk'), duration: 1800 })
+    else toastWarning(t('designer.ee.notUnique', { n: res.count }), { title: t('designer.ee.notUniqueTitle'), duration: 2600 })
   } catch (e) {
-    toastError((e as Error).message, { title: '校验失败' })
+    toastError((e as Error).message, { title: t('designer.ee.verifyFail') })
   } finally {
     checking.value = false
   }
@@ -457,11 +458,11 @@ const saving = ref(false)
 async function done() {
   const selector = activeSelector.value.trim()
   if (!name.value.trim()) {
-    toastWarning('请填写元素名称', { title: '名称为空' })
+    toastWarning(t('designer.ee.nameRequired'), { title: t('common.nameEmpty') })
     return
   }
   if (!selector) {
-    toastWarning('请填写或生成元素选择器', { title: '选择器为空' })
+    toastWarning(t('designer.ee.selectorRequiredSave'), { title: t('designer.selectorEmpty') })
     return
   }
   saving.value = true
@@ -478,7 +479,7 @@ async function done() {
       title: payload.value?.title,
     })
   } catch (e) {
-    toastError((e as Error).message, { title: '保存失败' })
+    toastError((e as Error).message, { title: t('designer.saveFail') })
   } finally {
     saving.value = false
   }
@@ -507,28 +508,28 @@ const showHelp = ref(false)
 <template>
   <div class="element-editor">
     <header class="ee-titlebar" data-tauri-drag-region>
-      <span class="ee-title">元素编辑器</span>
+      <span class="ee-title">{{ t('designer.ee.title') }}</span>
       <WindowControls />
     </header>
 
     <div class="ee-body">
       <!-- 操作按钮行 -->
       <div class="ee-actions">
-        <el-button size="small" :loading="repicking" @click="rePick">
+        <el-button :loading="repicking" @click="rePick">
           <el-icon :size="13"><Refresh /></el-icon>
-          重新捕获
+          {{ t('designer.ee.recapture') }}
         </el-button>
-        <el-button size="small" @click="pickSimilar">
+        <el-button @click="pickSimilar">
           <el-icon :size="13"><Connection /></el-icon>
-          捕获相似元素
+          {{ t('designer.ee.captureSimilar') }}
         </el-button>
-        <span v-if="similarCount" class="ee-similar-tip">已找到 {{ similarCount }} 个相似元素</span>
+        <span v-if="similarCount" class="ee-similar-tip">{{ t('designer.ee.similarTip', { n: similarCount }) }}</span>
       </div>
 
       <!-- 元素名称 -->
       <div class="ee-name-row">
-        <label class="ee-label">元素名称</label>
-        <el-input v-model="name" placeholder="元素名称" clearable />
+        <label class="ee-label">{{ t('designer.ee.labelName') }}</label>
+        <el-input v-model="name" :placeholder="t('designer.ee.namePlaceholder')" clearable />
       </div>
 
       <div v-if="loadError" class="ee-error">
@@ -540,16 +541,16 @@ const showHelp = ref(false)
       <div class="ee-panes">
         <div class="ee-pane-head">
           <button class="ee-tab" :class="{ active: activeTab === 'preview' }" @click="activeTab = 'preview'">
-            预览
+            {{ t('designer.ee.tabPreview') }}
           </button>
           <button class="ee-tab" :class="{ active: activeTab === 'locate' }" @click="activeTab = 'locate'">
             <el-icon :size="12"><Search /></el-icon>
-            精准定位
+            {{ t('designer.ee.tabLocate') }}
           </button>
           <span class="ee-pane-spacer"></span>
           <button class="ee-check" :disabled="checking" @click="check">
             <el-icon :size="13"><VideoPlay /></el-icon>
-            校验元素
+            {{ t('designer.ee.verify') }}
           </button>
         </div>
 
@@ -558,22 +559,22 @@ const showHelp = ref(false)
           <div class="ee-tree">
             <div class="ee-tree-head">
               <span class="ee-tree-col-check"></span>
-              <span>元素节点（网页结构）</span>
+              <span>{{ t('designer.ee.treeTitle') }}</span>
             </div>
             <div class="ee-tree-body">
-              <div v-if="loading" class="ee-tree-loading">加载中…</div>
+              <div v-if="loading" class="ee-tree-loading">{{ t('designer.ee.loading') }}</div>
               <template v-else>
                 <div
                   v-for="(n, i) in tree.ancestors"
                   :key="`a${i}`"
                   class="ee-node"
-                  :style="{ paddingLeft: `${10 + i * 12}px` }"
+                  :style="{ paddingLeft: `${12 + i * 12}px` }"
                   @click="useTreeNode(n)"
                 >
                   <span class="ee-node-box"></span>
                   <span class="ee-node-label">{{ nodeLabel(n) }}</span>
                 </div>
-                <div v-if="tree.self" class="ee-node is-self" :style="{ paddingLeft: `${10 + tree.ancestors.length * 12}px` }">
+                <div v-if="tree.self" class="ee-node is-self" :style="{ paddingLeft: `${12 + tree.ancestors.length * 12}px` }">
                   <span class="ee-node-box is-checked"></span>
                   <span class="ee-node-label">{{ nodeLabel(tree.self) }}</span>
                 </div>
@@ -581,14 +582,14 @@ const showHelp = ref(false)
                   v-for="(n, i) in tree.children"
                   :key="`c${i}`"
                   class="ee-node"
-                  :style="{ paddingLeft: `${10 + (tree.ancestors.length + 1) * 12}px` }"
+                  :style="{ paddingLeft: `${12 + (tree.ancestors.length + 1) * 12}px` }"
                   @click="useTreeNode(n)"
                 >
                   <span class="ee-node-box"></span>
                   <span class="ee-node-label">{{ nodeLabel(n) }}</span>
                   <span v-if="nodeDetail(n)" class="ee-node-text">{{ nodeDetail(n) }}</span>
                 </div>
-                <div v-if="!tree.self" class="ee-tree-empty">暂无层级数据</div>
+                <div v-if="!tree.self" class="ee-tree-empty">{{ t('designer.ee.treeEmpty') }}</div>
               </template>
             </div>
           </div>
@@ -598,20 +599,20 @@ const showHelp = ref(false)
             <template v-if="activeTab === 'locate'">
               <div class="ee-attr-head">
                 <span class="ee-attr-col-check"></span>
-                <span class="ee-attr-col-name">属性名</span>
-                <span class="ee-attr-col-match">匹配方式</span>
-                <span class="ee-attr-col-value">属性值</span>
+                <span class="ee-attr-col-name">{{ t('designer.ee.colAttr') }}</span>
+                <span class="ee-attr-col-match">{{ t('designer.ee.colMatch') }}</span>
+                <span class="ee-attr-col-value">{{ t('designer.ee.colValue') }}</span>
                 <span class="ee-attr-col-act"></span>
               </div>
               <div class="ee-attr-body">
                 <div v-for="row in rows" :key="row.id" class="ee-attr-row">
-                  <el-checkbox v-model="row.checked" size="small" />
-                  <el-input v-model="row.name" size="small" placeholder="属性名" class="ee-attr-name" />
-                  <el-select v-model="row.match" size="small" class="ee-attr-match">
-                    <el-option v-for="o in MATCH_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
+                  <el-checkbox v-model="row.checked" />
+                  <el-input v-model="row.name" :placeholder="t('designer.ee.colAttr')" class="ee-attr-name" />
+                  <el-select v-model="row.match" class="ee-attr-match">
+                    <el-option v-for="o in MATCH_OPTIONS" :key="o.value" :label="t(o.label)" :value="o.value" />
                   </el-select>
-                  <el-input v-model="row.value" size="small" placeholder="属性值" class="ee-attr-value" />
-                  <button class="ee-attr-del" title="删除该条件" @click="removeRow(row.id)">
+                  <el-input v-model="row.value" :placeholder="t('designer.ee.colValue')" class="ee-attr-value" />
+                  <button class="ee-attr-del" :title="t('designer.ee.delCondTip')" @click="removeRow(row.id)">
                     <el-icon :size="12"><Delete /></el-icon>
                   </button>
                 </div>
@@ -622,22 +623,22 @@ const showHelp = ref(false)
             <!-- 预览：元素基本信息 -->
             <div v-else class="ee-preview">
               <div class="ee-pv-grid">
-                <span class="ee-pv-k">标签</span>
+                <span class="ee-pv-k">{{ t('designer.kTag') }}</span>
                 <div class="ee-pv-v">{{ tree.self ? `<${tree.self.tagName}>` : '—' }}</div>
-                <span class="ee-pv-k">文本</span>
+                <span class="ee-pv-k">{{ t('designer.kText') }}</span>
                 <div class="ee-pv-v">{{ tree.self?.text || '—' }}</div>
                 <span class="ee-pv-k">CSS</span>
                 <div class="ee-pv-v mono">{{ cssSelector || '—' }}</div>
                 <span class="ee-pv-k">XPath</span>
                 <div class="ee-pv-v mono">{{ xpathSelector || '—' }}</div>
-                <span class="ee-pv-k">来源</span>
-                <div class="ee-pv-v">{{ payload?.title || payload?.url || '未知页面' }}</div>
+                <span class="ee-pv-k">{{ t('designer.kSource') }}</span>
+                <div class="ee-pv-v">{{ payload?.title || payload?.url || t('designer.unknownPage') }}</div>
               </div>
               <div v-if="checkResult" class="ee-pv-check">
-                校验结果：{{ checkResult.ok ? `匹配 ${checkResult.count} 个` : '未匹配到元素' }}
-                <span v-if="checkResult.unique" class="ee-badge ok">唯一</span>
-                <span v-else-if="checkResult.ok" class="ee-badge warn">不唯一</span>
-                <span v-else class="ee-badge err">无匹配</span>
+                {{ checkResult.ok ? t('designer.ee.checkResultOk', { n: checkResult.count }) : t('designer.ee.checkResultNone') }}
+                <span v-if="checkResult.unique" class="ee-badge ok">{{ t('designer.ee.badgeUnique') }}</span>
+                <span v-else-if="checkResult.ok" class="ee-badge warn">{{ t('designer.ee.badgeNotUnique') }}</span>
+                <span v-else class="ee-badge err">{{ t('designer.ee.badgeNoMatch') }}</span>
               </div>
             </div>
           </div>
@@ -648,13 +649,12 @@ const showHelp = ref(false)
       <div class="ee-anchor">
         <span class="ee-anchor-label">
           <el-icon :size="13"><Connection /></el-icon>
-          锚点
+          {{ t('designer.ee.anchor') }}
         </span>
         <div class="ee-anchor-input">
           <el-input
             v-model="anchorText"
-            size="small"
-            placeholder="输入锚点文本"
+            :placeholder="t('designer.ee.anchorPlaceholder')"
             @blur="anchorCaret = null"
           />
           <el-popover
@@ -670,12 +670,12 @@ const showHelp = ref(false)
             <VariablePicker @pick="insertVar" />
           </el-popover>
         </div>
-        <el-tooltip content="用锚点文本生成 XPath" placement="top" :show-after="300">
+        <el-tooltip :content="t('designer.ee.anchorGenTip')" placement="top" :show-after="300">
           <button class="ee-icon-btn" @click="applyAnchor">
             <el-icon :size="14"><Refresh /></el-icon>
           </button>
         </el-tooltip>
-        <el-tooltip content="清空锚点" placement="top" :show-after="300">
+        <el-tooltip :content="t('designer.ee.anchorClearTip')" placement="top" :show-after="300">
           <button class="ee-icon-btn" @click="anchorText = ''">
             <el-icon :size="14"><Delete /></el-icon>
           </button>
@@ -687,8 +687,8 @@ const showHelp = ref(false)
         <svg class="ee-spark" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
           <path d="M8 1.2 9.4 6 14.2 7.4 9.4 8.8 8 13.6 6.6 8.8 1.8 7.4 6.6 6z" />
         </svg>
-        <el-radio v-model="selectorType" value="css" size="small">默认选择器</el-radio>
-        <el-radio v-model="selectorType" value="xpath" size="small">XPath</el-radio>
+        <el-radio v-model="selectorType" value="css">{{ t('designer.ee.defaultSelector') }}</el-radio>
+        <el-radio v-model="selectorType" value="xpath">XPath</el-radio>
       </div>
     </div>
 
@@ -696,20 +696,20 @@ const showHelp = ref(false)
     <footer class="ee-footer">
       <el-popover v-model:visible="showHelp" :width="280" trigger="click" placement="top-start">
         <template #reference>
-          <el-button size="small">
+          <el-button>
             <el-icon :size="13"><HelpFilled /></el-icon>
-            帮助
+            {{ t('designer.ee.help') }}
           </el-button>
         </template>
         <div class="ee-help">
-          <p><b>精准定位</b>：勾选属性行，选择器会自动生成。优先用 id 与稳定的 class。</p>
-          <p><b>校验元素</b>：在页面上验证当前选择器，最好唯一命中。</p>
-          <p><b>锚点</b>：属性不稳定时，用元素文本生成 XPath。</p>
+          <p><b>{{ t('designer.ee.tabLocate') }}</b>：{{ t('designer.ee.helpLocate') }}</p>
+          <p><b>{{ t('designer.ee.verify') }}</b>：{{ t('designer.ee.helpVerify') }}</p>
+          <p><b>{{ t('designer.ee.anchor') }}</b>：{{ t('designer.ee.helpAnchor') }}</p>
         </div>
       </el-popover>
       <span class="ee-footer-spacer"></span>
-      <el-button size="small" @click="cancel">取消</el-button>
-      <el-button size="small" type="primary" :loading="saving" @click="done">完成</el-button>
+      <el-button @click="cancel">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" :loading="saving" @click="done">{{ t('designer.ee.done') }}</el-button>
     </footer>
   </div>
 </template>
@@ -729,9 +729,9 @@ const showHelp = ref(false)
 .ee-titlebar {
   display: flex;
   align-items: center;
-  height: 38px;
+  height: 40px;
   flex-shrink: 0;
-  padding-left: 14px;
+  padding-left: 16px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
 }
@@ -747,8 +747,8 @@ const showHelp = ref(false)
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 12px;
+  padding: 12px 16px;
   overflow: hidden;
 }
 
@@ -772,7 +772,7 @@ const showHelp = ref(false)
 .ee-name-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .ee-label {
@@ -784,8 +784,8 @@ const showHelp = ref(false)
 .ee-error {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 8px;
+  padding: 8px 12px;
   border-radius: var(--radius);
   background: var(--danger-bg, #fff2f0);
   color: var(--accent);
@@ -806,10 +806,10 @@ const showHelp = ref(false)
 .ee-pane-head {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
   height: 36px;
-  padding: 0 10px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
 }
@@ -818,10 +818,10 @@ const showHelp = ref(false)
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 26px;
+  height: 24px;
   padding: 0 12px;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-2);
   font-size: 12px;
@@ -847,10 +847,10 @@ const showHelp = ref(false)
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 26px;
-  padding: 0 10px;
+  height: 24px;
+  padding: 0 12px;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-2);
   font-size: 12px;
@@ -886,17 +886,17 @@ const showHelp = ref(false)
 .ee-tree-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 30px;
+  gap: 8px;
+  height: 32px;
   flex-shrink: 0;
-  padding: 0 10px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
   color: var(--text-3);
   font-size: 12px;
 }
 
 .ee-tree-col-check {
-  width: 14px;
+  width: 16px;
 }
 
 .ee-tree-body {
@@ -916,9 +916,9 @@ const showHelp = ref(false)
 .ee-node {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding-right: 10px;
+  gap: 8px;
+  height: 24px;
+  padding-right: 12px;
   cursor: pointer;
   font-size: 12px;
   color: var(--text-2);
@@ -935,11 +935,11 @@ const showHelp = ref(false)
 }
 
 .ee-node-box {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   flex-shrink: 0;
   border: 1px solid var(--border-strong, #c9c9cf);
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--bg);
 }
 
@@ -975,19 +975,19 @@ const showHelp = ref(false)
 
 .ee-attr-head {
   display: grid;
-  grid-template-columns: 14px 1fr 84px 1fr 20px;
+  grid-template-columns: 16px 1fr 84px 1fr 20px;
   align-items: center;
-  gap: 6px;
-  height: 30px;
+  gap: 8px;
+  height: 32px;
   flex-shrink: 0;
-  padding: 0 10px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
   color: var(--text-3);
   font-size: 12px;
 }
 
 .ee-attr-col-check {
-  width: 14px;
+  width: 16px;
 }
 
 .ee-attr-col-name,
@@ -1007,15 +1007,15 @@ const showHelp = ref(false)
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 6px 10px;
+  padding: 8px 12px;
 }
 
 .ee-attr-row {
   display: grid;
-  grid-template-columns: 14px 1fr 84px 1fr 20px;
+  grid-template-columns: 16px 1fr 84px 1fr 20px;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .ee-attr-name,
@@ -1043,8 +1043,8 @@ const showHelp = ref(false)
 }
 
 .ee-attr-add {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   margin-left: 20px;
   border: none;
   border-radius: 4px;
@@ -1071,7 +1071,7 @@ const showHelp = ref(false)
 .ee-pv-grid {
   display: grid;
   grid-template-columns: 52px 1fr;
-  gap: 8px 10px;
+  gap: 8px 12px;
   align-items: start;
 }
 
@@ -1090,7 +1090,7 @@ const showHelp = ref(false)
 }
 
 .ee-pv-check {
-  margin-top: 14px;
+  margin-top: 16px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1098,7 +1098,7 @@ const showHelp = ref(false)
 }
 
 .ee-badge {
-  padding: 1px 6px;
+  padding: 0 8px;
   border-radius: 4px;
   font-size: 11px;
 }
@@ -1142,12 +1142,12 @@ const showHelp = ref(false)
 }
 
 .ee-anchor-input :deep(.el-input__inner) {
-  padding-right: 30px;
+  padding-right: 32px;
 }
 
 .ee-fx {
   position: absolute;
-  right: 5px;
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 3;
@@ -1168,14 +1168,14 @@ const showHelp = ref(false)
 }
 
 .ee-icon-btn {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--bg);
   color: var(--text-2);
   cursor: pointer;
@@ -1192,12 +1192,12 @@ const showHelp = ref(false)
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
-  padding-top: 2px;
+  padding-top: 4px;
 }
 
 .ee-spark {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   color: var(--text-3);
 }
 
@@ -1208,7 +1208,7 @@ const showHelp = ref(false)
   gap: 8px;
   flex-shrink: 0;
   height: 52px;
-  padding: 0 14px;
+  padding: 0 16px;
   border-top: 1px solid var(--border);
   background: var(--bg);
 }

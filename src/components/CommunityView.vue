@@ -1,21 +1,26 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
-  View, ChatDotRound, Search, Star, ArrowRight, ArrowLeft, User,
-  Bell, Coin, ShoppingCart, Document, Guide, DataLine, Pointer,
+  ChatDotRound, Search, Star, ArrowRight, ArrowLeft, Delete,
+  Bell, Coin, ShoppingCart, Document, Guide, DataLine, Pointer, Download,
 } from '@element-plus/icons-vue'
-import { toastSuccess } from '../notify'
+import { ElMessageBox } from 'element-plus'
+import { communityApi, flowShareApi, ApiError, type ServerPost, type SharedFlowItem } from '../api'
+import { useAppStore } from '../store'
+import { useAuthStore } from '../auth'
+import { toastError, toastSuccess } from '../notify'
+import { t, type MessageKey } from '../i18n'
 
 interface Post {
-  id: string
+  id: number
   title: string
   excerpt: string
   body: string[]
   author: string
   category: string
-  views: string
-  replies: number
   likes: number
+  liked: boolean
+  replies: { id: number; author: string; content: string }[]
   color: string
   icon: any
 }
@@ -23,126 +28,202 @@ interface Post {
 const categories = ['全部', '经验分享', '指令开发', '行业案例', '问题求助', '版本更新']
 const keyword = ref('')
 const activeCat = ref('全部')
+const appStore = useAppStore()
+const auth = useAuthStore()
 
-const posts: Post[] = [
-  {
-    id: 'p1', title: '用轻羽RPA 搭建电商自动上架流程的完整实践',
-    excerpt: '从商品信息采集到批量上架，一条流程覆盖 6 个平台，每天节省 3 小时重复劳动。',
-    body: [
-      '做电商的朋友应该都懂：商品上架是最耗时却最重复的环节。今天要上架一个 SKU，往往要在 6 个平台分别登录、填表、传图、设置库存，一套流程走下来半小时就没了。',
-      '我的思路是把整个上架拆成三段：采集、转换、发布。采集段用「网页数据抓取」把商品信息从源头页面拉下来；转换段用「数据处理」指令做字段映射和格式清洗；发布段按平台分别建立子流程，用「网页自动化」逐项填写并提交。',
-      '实际跑下来，单 SKU 上架时间从 30 分钟压缩到 2 分钟，而且夜间可以挂着批量跑。需要注意的两点：一是各平台页面结构经常变，选择器要尽量用稳定的语义属性；二是发布前一定要加一步「人工确认」节点，避免错价直接上架。',
-      '流程文件我放在评论区，欢迎大家直接导入改造。有问题也可以在这里留言，我会尽量回复。',
-    ],
-    author: '飞鸟', category: '经验分享', views: '1.2万', replies: 46, likes: 328,
-    color: '#f97154', icon: ShoppingCart,
-  },
-  {
-    id: 'p2', title: '自定义指令开发入门：封装你的第一个 HTTP 请求指令',
-    excerpt: '以企业微信 Webhook 推送为例，手把手带你写出可复用的自定义指令。',
-    body: [
-      '很多同学在用 RPA 时都会遇到这样的场景：某个操作没有现成指令，但本质就是一个 HTTP 请求。这时候与其用一堆基础指令硬拼，不如把它封装成自己的自定义指令。',
-      '自定义指令的核心是「输入参数 + 处理逻辑 + 输出结果」。以企业微信 Webhook 为例，输入参数是 Webhook 地址、消息类型、消息内容；处理逻辑是拼接 JSON 报文并发起 POST；输出结果是接口返回的 errcode 与 errmsg。',
-      '开发时建议先把参数定义清楚，尤其是哪些是必填、哪些有默认值。参数校验放在指令入口，能避免流程运行到一半才报错。返回值建议统一用 JSON，方便后续节点直接引用字段。',
-      '封装完成后记得在指令描述里写清楚适用场景和示例，这样团队其他成员才能复用。这也是自定义指令最大的价值：把个人经验变成团队资产。',
-    ],
-    author: '青梧', category: '指令开发', views: '8,932', replies: 31, likes: 214,
-    color: '#3b6fe0', icon: Document,
-  },
-  {
-    id: 'p3', title: '财务月结自动化：发票识别与台账汇总方案拆解',
-    excerpt: 'OCR 识别 + 规则校验 + 汇总报表，月结时间从 2 天缩短到 2 小时。',
-    body: [
-      '财务月结最痛苦的不是算账，而是把发票信息一条条录进系统。我们公司每月大概有 800 张发票，人工录入不仅慢，还容易出错。',
-      '方案分三步：第一步用 OCR 指令批量识别发票上的代码、号码、金额、税额；第二步用规则校验，比如「金额 + 税额 = 价税合计」「发票代码长度固定」；第三步把校验通过的数据写入台账，并生成汇总报表。',
-      '识别准确率是这套方案的关键。我们实测下来，增值税专票识别准确率在 98% 左右，剩下的 2% 走人工复核。校验规则会把异常数据单独标记出来，财务只需要处理这些异常，工作量直接下降一个数量级。',
-      '整套流程每月 1 号自动运行，异常数据推送到财务群。上线三个月，月结时间从 2 天变成 2 小时。',
-    ],
-    author: '南山客', category: '行业案例', views: '6,417', replies: 22, likes: 187,
-    color: '#a05ff7', icon: Coin,
-  },
-  {
-    id: 'p4', title: '定时触发器不执行？常见排查思路汇总',
-    excerpt: '权限、休眠、时区三个高频坑点，附完整排查清单。',
-    body: [
-      '在社区里，「定时触发器到点不执行」是被问得最多的问题之一。我整理了一份排查清单，按照命中率从高到低排列，基本能覆盖 90% 的情况。',
-      '第一，检查电脑是否休眠或关机。定时触发依赖客户端进程在后台运行，如果电脑睡眠或者客户端被关闭，触发自然不会执行。建议在系统设置里允许客户端在后台运行。',
-      '第二，检查触发器的时间设置。特别注意时区问题，很多同学设置的时间是本地时间，但系统按 UTC 解析，导致实际触发时间差了 8 小时。',
-      '第三，检查关联流程是否存在且可运行。如果流程被删除或者流程本身有未处理的异常，触发器会静默跳过。可以到触发器详情里查看执行记录。',
-      '如果以上都排除了还是不执行，欢迎回帖描述你的环境，我会帮你一起看。',
-    ],
-    author: '拾光', category: '问题求助', views: '5,204', replies: 18, likes: 96,
-    color: '#0ea5e9', icon: Bell,
-  },
-  {
-    id: 'p5', title: '数据采集实战：网页表格抓取指令参数详解',
-    excerpt: '翻页、去重、增量采集一次讲清楚，附可直接导入的示例流程。',
-    body: [
-      '网页表格抓取是数据采集里最常用的指令，但参数众多，很多同学只会用默认配置。这篇把关键参数逐个讲清楚。',
-      '「选择器」决定抓什么，「翻页设置」决定抓多少页，「去重字段」决定数据是否重复。如果你要抓取一个列表页，建议先设置选择器只匹配表格行，再在字段映射里逐列配置。',
-      '翻页有两种方式：点击下一页按钮，或者直接改 URL 参数。前者更通用，后者更稳定。增量采集的核心是「去重字段」，比如用文章 ID 或者链接做唯一标识，配合本地数据文件就能实现断点续采。',
-      '示例流程我放在评论区了，包含翻页、去重、增量三个完整例子，导入后改下选择器就能用。',
-    ],
-    author: '临渊', category: '经验分享', views: '4,876', replies: 15, likes: 142,
-    color: '#22c55e', icon: DataLine,
-  },
-  {
-    id: 'p6', title: '新版本解读：设计器性能优化与画布快捷键',
-    excerpt: '本次更新画布缩放流畅度提升 60%，新增 12 个高频快捷键。',
-    body: [
-      '本次版本主要围绕设计器的流畅度和操作效率做了两项优化。',
-      '性能方面，画布渲染改成了按需重绘，缩放和平移时的帧率明显提升，大型流程（100 个节点以上）也能流畅拖动。同时优化了节点连线的计算逻辑，连线编辑的响应速度提升约 60%。',
-      '效率方面，新增了 12 个高频快捷键，包括节点复制粘贴、快速连线、画布复位、属性面板聚焦等。完整的快捷键列表可以在「帮助中心」里查看。',
-      '如果你在使用过程中遇到卡顿或者其他问题，欢迎在仓库 Issue 里反馈，我们会持续跟进。',
-    ],
-    author: '轻羽团队', category: '版本更新', views: '3,690', replies: 12, likes: 88,
-    color: '#6366f1', icon: Guide,
-  },
-  {
-    id: 'p7', title: '求助：Excel 批量处理时单元格格式丢失',
-    excerpt: '合并多个工作表后日期列变成数字，有人遇到过吗？',
-    body: [
-      '如题，我用 Excel 处理指令合并了 20 多个工作表，结果日期列全变成了 45231 这样的数字序列，格式完全丢了。',
-      '我试过在合并后加一步「设置单元格格式」，但好像不生效。有没有同学知道正确的处理方式？',
-      '补充一下环境：源文件都是 .xlsx，日期列在源文件里是正常的日期格式，合并后才出问题。',
-    ],
-    author: '小白鼠', category: '问题求助', views: '2,113', replies: 9, likes: 27,
-    color: '#ec4899', icon: User,
-  },
-  {
-    id: 'p8', title: '年度热帖回顾：社区最受欢迎的 10 条自定义指令',
-    excerpt: '从文件监控到邮件自动化，全部可直接安装使用。',
-    body: [
-      '年底了，我们把社区这一年里最受欢迎的自定义指令做了一个盘点，涵盖文件监控、邮件自动化、数据同步、报表生成等方向。',
-      '这些指令全部由社区成员贡献，经过实际项目验证，可以直接安装使用。每条指令都附有详细的使用说明和示例流程。',
-      '如果你也有好用的自定义指令，欢迎分享到社区。下一年的盘点里，也许就有你的作品。',
-      '完整榜单和安装方式见评论区，感谢每一位贡献者。',
-    ],
-    author: '社区运营', category: '经验分享', views: '1,988', replies: 7, likes: 65,
-    color: '#f59e0b', icon: Star,
-  },
-]
+/** 分类值（发给服务端）→ 显示文案 */
+const CAT_KEYS: Record<string, MessageKey> = {
+  全部: 'community.cat.all',
+  经验分享: 'community.cat.experience',
+  指令开发: 'community.cat.dev',
+  行业案例: 'community.cat.case',
+  问题求助: 'community.cat.help',
+  版本更新: 'community.cat.release',
+}
+const catLabel = (c: string) => t(CAT_KEYS[c] ?? 'community.cat.all')
 
-const filtered = computed(() => {
-  const k = keyword.value.trim()
-  return posts.filter((p) => {
-    const matchCat = activeCat.value === '全部' || p.category === activeCat.value
-    const matchKw = !k || p.title.includes(k) || p.excerpt.includes(k)
-    return matchCat && matchKw
-  })
+/** 服务端分页大小 */
+const PAGE_SIZE = 20
+
+/** 按分类推断帖子图标与主色 */
+function iconForCat(cat: string): { color: string; icon: any } {
+  switch (cat) {
+    case '经验分享': return { color: '#f97154', icon: ShoppingCart }
+    case '指令开发': return { color: '#3b6fe0', icon: Document }
+    case '行业案例': return { color: '#a05ff7', icon: Coin }
+    case '问题求助': return { color: '#0ea5e9', icon: Bell }
+    case '版本更新': return { color: '#6366f1', icon: Guide }
+    default: return { color: '#22c55e', icon: DataLine }
+  }
+}
+
+/** 服务端帖子 → 本地视图模型（正文按空行分段） */
+function toLocal(p: ServerPost): Post {
+  const paras = p.content.split(/\n+/).map((s) => s.trim()).filter(Boolean)
+  const cat = categories.includes(p.category) ? p.category : '经验分享'
+  return {
+    id: p.id,
+    title: p.title,
+    excerpt: paras[0]?.slice(0, 80) ?? '',
+    body: paras.length ? paras : [t('community.noBody')],
+    author: p.author,
+    category: cat,
+    likes: p.likes,
+    liked: p.liked,
+    replies: p.replies.map((r) => ({ id: r.id, author: r.author, content: r.content })),
+    ...iconForCat(cat),
+  }
+}
+
+const posts = ref<Post[]>([])
+const offline = ref(false)
+const loading = ref(false)
+const page = ref(0)
+const total = ref(0)
+
+async function loadPosts() {
+  loading.value = true
+  try {
+    const sort = activeCat.value === '全部' ? 'hot' : 'latest'
+    const res = await communityApi.listPosts(sort, keyword.value.trim(), activeCat.value, page.value, PAGE_SIZE)
+    posts.value = res.items.map(toLocal)
+    total.value = res.total
+    offline.value = false
+  } catch (err) {
+    offline.value = true
+    posts.value = []
+    total.value = 0
+    if (!(err instanceof ApiError && err.offline)) {
+      toastError(err instanceof Error ? err.message : t('community.loadFailed'), { title: t('community.title') })
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadPosts()
+  loadSharedFlows()
 })
 
-const hot = computed(() => [...posts].sort((a, b) => b.likes - a.likes).slice(0, 5))
+let kwTimer: ReturnType<typeof setTimeout> | null = null
+watch(keyword, () => {
+  if (kwTimer) clearTimeout(kwTimer)
+  kwTimer = setTimeout(() => {
+    page.value = 0
+    loadPosts()
+  }, 350)
+})
+
+/* 切换分类：直接按服务端分类过滤重新加载 */
+watch(activeCat, () => {
+  page.value = 0
+  loadPosts()
+})
+
+function onPageChange(p: number) {
+  page.value = p - 1
+  loadPosts()
+}
+
+const filtered = computed(() => posts.value)
+const hot = computed(() => [...posts.value].sort((a, b) => b.likes - a.likes).slice(0, 5))
+
+/* ---- 流程广场：云端共享流程 ---- */
+const sharedFlows = ref<SharedFlowItem[]>([])
+const sharedOffline = ref(true)
+const importing = ref(false)
+
+async function loadSharedFlows() {
+  try {
+    sharedFlows.value = await flowShareApi.list('latest', '')
+    sharedOffline.value = false
+  } catch {
+    sharedOffline.value = true
+    sharedFlows.value = []
+  }
+}
+
+async function importShared(item: SharedFlowItem) {
+  importing.value = true
+  try {
+    const raw = await flowShareApi.download(item.id)
+    await appStore.importFlow(raw)
+    toastSuccess(t('community.importedOk', { name: item.name }), { title: t('community.importSuccess'), duration: 2400 })
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : t('community.importFailed'), { title: t('community.importFailed') })
+  } finally {
+    importing.value = false
+  }
+}
+
+function relTime(iso: string): string {
+  const ts = Date.parse(iso)
+  if (Number.isNaN(ts)) return ''
+  const diff = Date.now() - ts
+  if (diff < 60_000) return t('common.justNow')
+  if (diff < 3600_000) return t('common.minAgo', { n: Math.floor(diff / 60_000) })
+  if (diff < 86400_000) return t('common.hourAgo', { n: Math.floor(diff / 3600_000) })
+  return t('common.dayAgo', { n: Math.floor(diff / 86400_000) })
+}
 
 /* ---- 帖子正文 ---- */
 const detailView = ref(false)
 const detail = ref<Post | null>(null)
-const likedIds = reactive<Set<string>>(new Set())
-const likeDelta = reactive<Record<string, number>>({})
 
-function open(post: Post) {
+/** 当前登录用户是否为帖子作者（作者本人可删帖） */
+function isMine(post: Post | null): boolean {
+  return !!post && !!auth.session && post.author === auth.session.username && post.id > 0
+}
+
+/** 当前登录用户是否为回复作者（回复作者本人可删回复） */
+function isMyReply(reply: { author: string }): boolean {
+  return !!auth.session && reply.author === auth.session.username
+}
+
+/* ---- 删除帖子 ---- */
+const deleting = ref(false)
+
+async function removePost(post: Post) {
+  if (!post) return
+  try {
+    await ElMessageBox.confirm(t('community.deletePostConfirm'), t('community.deletePost'), {
+      confirmButtonText: t('common.delete'),
+      cancelButtonText: t('common.cancel'),
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  deleting.value = true
+  try {
+    await communityApi.removePost(post.id)
+    posts.value = posts.value.filter((p) => p.id !== post.id)
+    detailView.value = false
+    detail.value = null
+    toastSuccess(t('community.postDeleted'), { title: t('community.deleteSuccess'), duration: 1800 })
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : t('community.deleteFailed'), { title: t('community.deleteFailed') })
+  } finally {
+    deleting.value = false
+  }
+}
+
+async function open(post: Post) {
   detail.value = post
   detailView.value = true
+  // 打开详情时尝试刷新服务端最新数据（回复 / 点赞）
+  if (!offline.value) {
+    try {
+      const fresh = await communityApi.detail(post.id)
+      const mapped = toLocal(fresh)
+      const idx = posts.value.findIndex((p) => p.id === post.id)
+      if (idx >= 0) posts.value[idx] = mapped
+      detail.value = mapped
+    } catch {
+      /* 保留当前数据 */
+    }
+  }
 }
 
 function closeDetail() {
@@ -150,39 +231,135 @@ function closeDetail() {
   detail.value = null
 }
 
-function toggleLike(post: Post | null) {
+async function toggleLike(post: Post | null) {
   if (!post) return
-  if (likedIds.has(post.id)) {
-    likedIds.delete(post.id)
-    likeDelta[post.id] = (likeDelta[post.id] ?? 0) - 1
-  } else {
-    likedIds.add(post.id)
-    likeDelta[post.id] = (likeDelta[post.id] ?? 0) + 1
+  if (!auth.session) {
+    toastError(t('community.loginToLike'), { title: t('common.notLoggedIn') })
+    return
+  }
+  if (offline.value) {
+    toastError(t('community.offlineLike'), { title: t('community.offline') })
+    return
+  }
+  try {
+    // 服务端点赞切换：已点赞则取消，未点赞则 +1；liked 状态以服务端记录为准
+    const res = await communityApi.like(post.id)
+    post.liked = res.liked
+    post.likes = res.likes
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : t('community.likeFailed'), { title: t('community.likeFailed') })
+  }
+}
+
+/* ---- 删除回复 ---- */
+const removingReplyId = ref<number | null>(null)
+
+async function removeReply(post: Post | null, reply: { id: number; author: string; content: string }) {
+  if (!post || !reply.id) return
+  try {
+    await ElMessageBox.confirm(t('community.deleteReplyConfirm'), t('community.deleteReply'), {
+      confirmButtonText: t('common.delete'),
+      cancelButtonText: t('common.cancel'),
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  removingReplyId.value = reply.id
+  try {
+    await communityApi.removeReply(post.id, reply.id)
+    post.replies = post.replies.filter((r) => r.id !== reply.id)
+    toastSuccess(t('community.replyDeleted'), { title: t('community.deleteSuccess'), duration: 1800 })
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : t('community.deleteFailed'), { title: t('community.deleteFailed') })
+  } finally {
+    removingReplyId.value = null
   }
 }
 
 function likeCount(post: Post | null): number {
-  return post ? post.likes + (likeDelta[post.id] ?? 0) : 0
+  return post ? post.likes : 0
 }
 
-/* ---- 本地回复 ---- */
+/* ---- 回复 ---- */
 const replyVisible = ref(false)
 const replyText = ref('')
-const replyList = ref<Record<string, string[]>>({})
+const replySubmitting = ref(false)
 
 function toggleReply() {
+  if (!auth.session) {
+    toastError(t('community.loginToReply'), { title: t('common.notLoggedIn') })
+    return
+  }
   replyVisible.value = !replyVisible.value
 }
 
-function submitReply(post: Post | null) {
+async function submitReply(post: Post | null) {
   if (!post) return
   const text = replyText.value.trim()
   if (!text) return
-  if (!replyList.value[post.id]) replyList.value[post.id] = []
-  replyList.value[post.id].push(text)
-  replyText.value = ''
-  replyVisible.value = false
-  toastSuccess('回复已发表', { title: '回复成功', duration: 1800 })
+  if (offline.value) {
+    toastError(t('community.offlineReply'), { title: t('community.offline') })
+    return
+  }
+  replySubmitting.value = true
+  try {
+    const r = await communityApi.reply(post.id, text)
+    post.replies.push({ id: r.id, author: r.author, content: r.content })
+    replyText.value = ''
+    replyVisible.value = false
+    toastSuccess(t('community.replyOk'), { title: t('community.replySuccess'), duration: 1800 })
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : t('community.replyFailed'), { title: t('community.replyFailed') })
+  } finally {
+    replySubmitting.value = false
+  }
+}
+
+/* ---- 发帖（独立页面视图） ---- */
+const composeView = ref(false)
+const postForm = reactive({ title: '', content: '', category: '经验分享' })
+const postSubmitting = ref(false)
+const composerCats = categories.filter((c) => c !== '全部')
+
+function openComposer() {
+  if (!auth.session) {
+    toastError(t('community.loginToPost'), { title: t('common.notLoggedIn') })
+    return
+  }
+  postForm.title = ''
+  postForm.content = ''
+  postForm.category = '经验分享'
+  detailView.value = false
+  composeView.value = true
+}
+
+function closeComposer() {
+  composeView.value = false
+}
+
+async function submitPost() {
+  const title = postForm.title.trim()
+  const content = postForm.content.trim()
+  if (!title) {
+    toastError(t('community.titleRequired'), { title: t('community.newPost') })
+    return
+  }
+  if (!content) {
+    toastError(t('community.contentRequired'), { title: t('community.newPost') })
+    return
+  }
+  postSubmitting.value = true
+  try {
+    const created = await communityApi.createPost(title, content, postForm.category)
+    posts.value.unshift(toLocal(created))
+    composeView.value = false
+    toastSuccess(t('community.postCreated'), { title: t('community.postSuccess'), duration: 2000 })
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : t('community.postFailed'), { title: t('community.postFailed') })
+  } finally {
+    postSubmitting.value = false
+  }
 }
 
 function catTag(cat: string) {
@@ -192,15 +369,49 @@ function catTag(cat: string) {
 
 <template>
   <section class="page">
-    <template v-if="!detailView">
+    <template v-if="composeView">
+      <div class="detail-nav">
+        <el-button text :icon="ArrowLeft" @click="closeComposer">{{ t('community.back') }}</el-button>
+      </div>
+      <div class="compose-page sec-card">
+        <h2 class="compose-title">{{ t('community.composeTitle') }}</h2>
+        <el-form label-position="top" class="compose-form">
+          <el-form-item :label="t('community.labelTitle')">
+            <el-input v-model="postForm.title" maxlength="120" show-word-limit :placeholder="t('community.titlePlaceholder')" />
+          </el-form-item>
+          <el-form-item :label="t('community.labelCategory')">
+            <el-radio-group v-model="postForm.category">
+              <el-radio-button v-for="c in composerCats" :key="c" :value="c">{{ catLabel(c) }}</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item :label="t('community.labelContent')">
+            <el-input
+              v-model="postForm.content"
+              type="textarea"
+              :rows="12"
+              maxlength="20000"
+              show-word-limit
+              :placeholder="t('community.contentPlaceholder')"
+            />
+          </el-form-item>
+        </el-form>
+        <div class="compose-actions">
+          <el-button @click="closeComposer">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" :loading="postSubmitting" @click="submitPost">{{ t('community.publish') }}</el-button>
+        </div>
+      </div>
+    </template>
+
+    <template v-else-if="!detailView">
       <div class="page-head">
         <div class="page-head-main">
-          <div class="page-kicker">创作者社区</div>
-          <h1 class="page-title">社区</h1>
-          <p class="page-sub">与自动化创作者交流经验、分享指令与案例</p>
+          <div class="page-kicker">{{ t('community.kicker') }}</div>
+          <h1 class="page-title">{{ t('community.title') }}</h1>
+          <p class="page-sub">{{ t('community.sub') }}</p>
         </div>
         <div class="page-actions">
-          <el-input v-model="keyword" placeholder="搜索帖子" clearable class="mkt-search">
+          <el-button round :icon="Pointer" @click="openComposer">{{ t('community.newPost') }}</el-button>
+          <el-input v-model="keyword" :placeholder="t('community.searchPlaceholder')" clearable class="mkt-search">
             <template #prefix>
               <el-icon :size="14"><Search /></el-icon>
             </template>
@@ -209,7 +420,7 @@ function catTag(cat: string) {
       </div>
 
       <el-radio-group v-model="activeCat" class="cat-group">
-        <el-radio-button v-for="c in categories" :key="c" :value="c">{{ c }}</el-radio-button>
+        <el-radio-button v-for="c in categories" :key="c" :value="c">{{ catLabel(c) }}</el-radio-button>
       </el-radio-group>
 
       <div class="comm-layout">
@@ -229,21 +440,30 @@ function catTag(cat: string) {
             <div class="post-main">
               <div class="post-title">
                 {{ p.title }}
-                <el-tag :type="catTag(p.category)" effect="light" round>{{ p.category }}</el-tag>
+                <el-tag :type="catTag(p.category)" effect="light" round>{{ catLabel(p.category) }}</el-tag>
               </div>
               <div class="post-excerpt">{{ p.excerpt }}</div>
               <div class="post-meta">
                 <span class="post-author">{{ p.author }}</span>
-                <span><el-icon :size="12"><View /></el-icon>{{ p.views }}</span>
-                <span><el-icon :size="12"><ChatDotRound /></el-icon>{{ p.replies }}</span>
+                <span><el-icon :size="12"><ChatDotRound /></el-icon>{{ p.replies.length }}</span>
                 <span><el-icon :size="12"><Star /></el-icon>{{ p.likes }}</span>
               </div>
             </div>
             <el-icon :size="14" class="post-arrow"><ArrowRight /></el-icon>
           </div>
+          <el-pagination
+            v-if="total > PAGE_SIZE"
+            class="comm-pagination"
+            layout="prev, pager, next"
+            :total="total"
+            :page-size="PAGE_SIZE"
+            :current-page="page + 1"
+            background
+            @current-change="onPageChange"
+          />
           <el-empty
             v-if="!filtered.length"
-            description="没有找到匹配的帖子"
+            :description="offline ? t('community.emptyOffline') : t('community.emptyNoMatch')"
             :image-size="96"
             class="empty-block"
           />
@@ -251,7 +471,7 @@ function catTag(cat: string) {
 
         <aside class="comm-side">
           <div class="side-card sec-card">
-            <div class="side-card-title">热门帖子</div>
+            <div class="side-card-title">{{ t('community.hot') }}</div>
             <div
               v-for="(h, i) in hot"
               :key="h.id"
@@ -266,11 +486,37 @@ function catTag(cat: string) {
             </div>
           </div>
           <div class="side-card sec-card">
-            <div class="side-card-title">发帖规则</div>
+            <div class="side-card-title">{{ t('community.flowPlaza') }}</div>
+            <div v-if="sharedFlows.length === 0" class="flow-empty">
+              {{ sharedOffline ? t('community.plazaOffline') : t('community.plazaEmpty') }}
+            </div>
+            <div
+              v-for="f in sharedFlows.slice(0, 8)"
+              :key="f.id"
+              class="flow-item"
+            >
+              <div class="flow-item-main">
+                <div class="flow-item-name" :title="f.name">{{ f.name }}</div>
+                <div class="flow-item-meta">{{ f.author }} · {{ t('community.nodeCount', { n: f.nodeCount }) }} · {{ relTime(f.createdAt) }}</div>
+              </div>
+              <el-button
+                type="primary"
+                plain
+                round
+                :icon="Download"
+                :loading="importing"
+                @click="importShared(f)"
+              >
+                {{ t('community.import') }}
+              </el-button>
+            </div>
+          </div>
+          <div class="side-card sec-card">
+            <div class="side-card-title">{{ t('community.rules') }}</div>
             <ul class="rule-list">
-              <li>友善交流，尊重每一位创作者</li>
-              <li>禁止发布广告与无关内容</li>
-              <li>分享流程请标注使用环境与版本</li>
+              <li>{{ t('community.rule1') }}</li>
+              <li>{{ t('community.rule2') }}</li>
+              <li>{{ t('community.rule3') }}</li>
             </ul>
           </div>
         </aside>
@@ -279,7 +525,7 @@ function catTag(cat: string) {
 
     <template v-else-if="detail">
       <div class="detail-nav">
-        <el-button text :icon="ArrowLeft" @click="closeDetail">返回社区</el-button>
+        <el-button text :icon="ArrowLeft" @click="closeDetail">{{ t('community.back') }}</el-button>
       </div>
       <div class="detail-page sec-card">
         <div class="detail-head">
@@ -289,9 +535,9 @@ function catTag(cat: string) {
           <div class="detail-head-main">
             <div class="detail-author">{{ detail.author }}</div>
             <div class="detail-meta">
-              <el-tag :type="catTag(detail.category)" effect="light" round>{{ detail.category }}</el-tag>
-              <span><el-icon :size="12"><View /></el-icon>{{ detail.views }}</span>
-              <span><el-icon :size="12"><ChatDotRound /></el-icon>{{ detail.replies }}</span>
+              <el-tag :type="catTag(detail.category)" effect="light" round>{{ catLabel(detail.category) }}</el-tag>
+              <span><el-icon :size="12"><ChatDotRound /></el-icon>{{ detail.replies.length }}</span>
+              <span><el-icon :size="12"><Star /></el-icon>{{ detail.likes }}</span>
             </div>
           </div>
         </div>
@@ -305,21 +551,43 @@ function catTag(cat: string) {
         <div class="detail-actions">
           <el-button
             round
-            :type="likedIds.has(detail.id) ? 'primary' : 'default'"
-            :plain="!likedIds.has(detail.id)"
+            :type="detail.liked ? 'primary' : 'default'"
+            :plain="!detail.liked"
             :icon="Pointer"
             @click="toggleLike(detail)"
           >
-            点赞 {{ likeCount(detail) }}
+            {{ detail.liked ? t('community.liked') : t('community.like') }} {{ likeCount(detail) }}
           </el-button>
-          <el-button round :icon="ChatDotRound" @click="toggleReply">回复</el-button>
+          <el-button round :icon="ChatDotRound" @click="toggleReply">{{ t('community.reply') }}</el-button>
+          <el-button
+            v-if="isMine(detail)"
+            round
+            type="danger"
+            plain
+            :icon="Delete"
+            :loading="deleting"
+            @click="removePost(detail)"
+          >
+            {{ t('community.deletePost') }}
+          </el-button>
         </div>
 
-        <div v-if="replyList[detail.id]?.length" class="reply-list">
-          <div class="reply-title">本地回复 {{ replyList[detail.id].length }}</div>
-          <div v-for="(r, i) in replyList[detail.id]" :key="i" class="reply-item">
-            <span class="reply-author">我</span>
-            <span class="reply-text">{{ r }}</span>
+        <div v-if="detail.replies.length" class="reply-list">
+          <div class="reply-title">{{ t('community.replies', { n: detail.replies.length }) }}</div>
+          <div v-for="r in detail.replies" :key="r.id" class="reply-item">
+            <span class="reply-author">{{ r.author }}</span>
+            <span class="reply-text">{{ r.content }}</span>
+            <el-button
+              v-if="isMyReply(r)"
+              class="reply-del"
+              link
+              type="danger"
+              size="small"
+              :loading="removingReplyId === r.id"
+              @click="removeReply(detail, r)"
+            >
+              {{ t('common.delete') }}
+            </el-button>
           </div>
         </div>
 
@@ -328,12 +596,12 @@ function catTag(cat: string) {
             v-model="replyText"
             type="textarea"
             :rows="3"
-            placeholder="写下你的回复…"
+            :placeholder="t('community.replyPlaceholder')"
             @keydown.enter.prevent="submitReply(detail)"
           />
           <div class="reply-editor-foot">
-            <el-button @click="toggleReply">取消</el-button>
-            <el-button type="primary" @click="submitReply(detail)">发表回复</el-button>
+            <el-button @click="toggleReply">{{ t('common.cancel') }}</el-button>
+            <el-button type="primary" :loading="replySubmitting" @click="submitReply(detail)">{{ t('community.replySubmit') }}</el-button>
           </div>
         </div>
       </div>
@@ -359,12 +627,12 @@ function catTag(cat: string) {
 
 .comm-post {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   align-items: flex-start;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 16px 18px;
+  padding: 16px;
   cursor: pointer;
   transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
@@ -432,7 +700,7 @@ function catTag(cat: string) {
 .post-meta span {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 
 .post-author {
@@ -459,15 +727,15 @@ function catTag(cat: string) {
   font-size: 13px;
   font-weight: 500;
   color: var(--text);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .hot-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 4px;
-  border-radius: 6px;
+  padding: 4px;
+  border-radius: 8px;
   cursor: pointer;
 }
 
@@ -476,8 +744,8 @@ function catTag(cat: string) {
 }
 
 .hot-rank {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 4px;
   background: var(--panel);
   color: var(--text-3);
@@ -510,6 +778,74 @@ function catTag(cat: string) {
   font-size: 12px;
   color: var(--text-2);
   line-height: 1.9;
+}
+
+/* ---- 流程广场 ---- */
+.flow-empty {
+  font-size: 12px;
+  color: var(--text-3);
+  padding: 8px 0;
+}
+
+.flow-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  border-radius: 8px;
+}
+
+.flow-item:hover {
+  background: var(--panel);
+}
+
+.flow-item-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.flow-item-name {
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-item-meta {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ---- 发帖页 ---- */
+.compose-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.compose-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.compose-form :deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+
+.compose-form :deep(.el-form-item:last-child) {
+  margin-bottom: 0;
+}
+
+.compose-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
 
 /* ---- 帖子详情页 ---- */
@@ -562,7 +898,7 @@ function catTag(cat: string) {
 .detail-meta span {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 
 .detail-body {
@@ -580,12 +916,12 @@ function catTag(cat: string) {
 }
 
 .detail-actions {
-  padding-top: 14px;
+  padding-top: 16px;
   border-top: 1px solid var(--border);
 }
 
 .reply-list {
-  padding-top: 14px;
+  padding-top: 16px;
   border-top: 1px solid var(--border);
 }
 
@@ -614,7 +950,7 @@ function catTag(cat: string) {
 }
 
 .reply-editor {
-  padding-top: 14px;
+  padding-top: 16px;
   border-top: 1px solid var(--border);
 }
 
@@ -623,6 +959,18 @@ function catTag(cat: string) {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 8px;
+}
+
+/* ---- 分页 ---- */
+.comm-pagination {
+  margin-top: 4px;
+  justify-content: center;
+}
+
+/* 回复行的删除入口 */
+.reply-item .reply-del {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 @media (max-width: 1100px) {

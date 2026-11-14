@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAppStore } from '../store'
 import { useTriggerStore } from '../triggers'
 import { useAuthStore } from '../auth'
+import { userApi, type UserProfileFull } from '../api'
+import { i18n, t } from '../i18n'
 import { Lock, Trophy } from '@element-plus/icons-vue'
 import PageShell from '../components/PageShell.vue'
 
@@ -10,16 +12,44 @@ const store = useAppStore()
 const triggerStore = useTriggerStore()
 const auth = useAuthStore()
 
-const stats = computed(() => [
-  { label: '已创建流程', value: store.flows.length, suffix: '个' },
-  { label: '触发器数量', value: triggerStore.triggers.length, suffix: '个' },
-  { label: '今日运行', value: triggerStore.todayRuns, suffix: '次' },
-  { label: '累计运行', value: triggerStore.history.length, suffix: '次' },
-])
+/* 服务端统计：社区帖子 / 回复计数来自 /api/users/me（未登录或离线时隐藏） */
+const serverProfile = ref<UserProfileFull | null>(null)
+
+onMounted(async () => {
+  if (!auth.isLoggedIn) return
+  try {
+    serverProfile.value = await userApi.me()
+  } catch {
+    serverProfile.value = null
+  }
+})
+
+const stats = computed(() => {
+  const base = [
+    { label: t('stats.flows'), value: store.flows.length, suffix: t('stats.flowsUnit') },
+    { label: t('stats.triggers'), value: triggerStore.triggers.length, suffix: t('stats.triggersUnit') },
+    { label: t('stats.todayRuns'), value: triggerStore.todayRuns, suffix: t('stats.runsUnit') },
+    { label: t('stats.totalRuns'), value: triggerStore.history.length, suffix: t('stats.runsUnit') },
+  ]
+  if (serverProfile.value) {
+    base.push(
+      { label: t('stats.posts'), value: serverProfile.value.posts, suffix: t('stats.postsUnit') },
+      { label: t('stats.replies'), value: serverProfile.value.replies, suffix: t('stats.repliesUnit') },
+    )
+  }
+  return base
+})
 
 const daysSinceLogin = computed(() => {
   if (!auth.session) return 0
   return Math.max(1, Math.floor((Date.now() - auth.session.loginAt) / 86400000) + 1)
+})
+
+/* 使用起始日：跟随当前语言格式化日期 */
+const sinceLabel = computed(() => {
+  if (!auth.session) return '—'
+  const date = new Date(auth.session.loginAt).toLocaleDateString(i18n.locale)
+  return t('achievement.since', { date })
 })
 
 interface Badge {
@@ -38,57 +68,57 @@ const badges = computed<Badge[]>(() => {
   return [
     {
       key: 'first-flow',
-      name: '初出茅庐',
-      desc: '创建第 1 个流程',
+      name: t('achievement.badge.firstFlow.name'),
+      desc: t('achievement.badge.firstFlow.desc'),
       unlocked: flows >= 1,
       progress: Math.min(1, flows / 1),
     },
     {
       key: 'five-flows',
-      name: '小有产出',
-      desc: '创建 5 个流程',
+      name: t('achievement.badge.fiveFlows.name'),
+      desc: t('achievement.badge.fiveFlows.desc'),
       unlocked: flows >= 5,
       progress: Math.min(1, flows / 5),
     },
     {
       key: 'flow-master',
-      name: '流程大师',
-      desc: '创建 20 个流程',
+      name: t('achievement.badge.flowMaster.name'),
+      desc: t('achievement.badge.flowMaster.desc'),
       unlocked: flows >= 20,
       progress: Math.min(1, flows / 20),
     },
     {
       key: 'first-run',
-      name: '第一次运行',
-      desc: '完成 1 次流程运行',
+      name: t('achievement.badge.firstRun.name'),
+      desc: t('achievement.badge.firstRun.desc'),
       unlocked: runs >= 1,
       progress: Math.min(1, runs / 1),
     },
     {
       key: 'hundred-runs',
-      name: '百次运行',
-      desc: '累计运行 100 次',
+      name: t('achievement.badge.hundredRuns.name'),
+      desc: t('achievement.badge.hundredRuns.desc'),
       unlocked: runs >= 100,
       progress: Math.min(1, runs / 100),
     },
     {
       key: 'scheduler',
-      name: '调度达人',
-      desc: '创建 3 个触发器',
+      name: t('achievement.badge.scheduler.name'),
+      desc: t('achievement.badge.scheduler.desc'),
       unlocked: triggers >= 3,
       progress: Math.min(1, triggers / 3),
     },
     {
       key: 'three-days',
-      name: '三日留存',
-      desc: '连续使用 3 天',
+      name: t('achievement.badge.threeDays.name'),
+      desc: t('achievement.badge.threeDays.desc'),
       unlocked: days >= 3,
       progress: Math.min(1, days / 3),
     },
     {
       key: 'seven-days',
-      name: '七日留存',
-      desc: '连续使用 7 天',
+      name: t('achievement.badge.sevenDays.name'),
+      desc: t('achievement.badge.sevenDays.desc'),
       unlocked: days >= 7,
       progress: Math.min(1, days / 7),
     },
@@ -101,7 +131,7 @@ const nextBadge = computed(() => badges.value.find((b) => !b.unlocked) ?? null)
 </script>
 
 <template>
-  <PageShell title="我的成就" kicker="成长足迹" sub="记录你在轻羽 RPA 中的成长轨迹">
+  <PageShell :title="t('achievement.title')" :kicker="t('achievement.kicker')" :sub="t('achievement.sub')">
     <div class="ach-layout">
       <div class="ach-main">
         <div class="stat-row">
@@ -115,7 +145,7 @@ const nextBadge = computed(() => badges.value.find((b) => !b.unlocked) ?? null)
 
         <section class="sec-card">
           <div class="sec-card-head">
-            <h2 class="sec-title">成就进度</h2>
+            <h2 class="sec-title">{{ t('achievement.progressTitle') }}</h2>
             <span class="sec-meta">{{ unlockedCount }} / {{ badges.length }}</span>
           </div>
           <el-progress
@@ -144,22 +174,20 @@ const nextBadge = computed(() => badges.value.find((b) => !b.unlocked) ?? null)
               :stroke-width="4"
               :show-text="false"
             />
-            <span v-else class="badge-done">已解锁</span>
+            <span v-else class="badge-done">{{ t('achievement.unlocked') }}</span>
           </div>
         </div>
       </div>
 
       <aside class="ach-side">
         <section class="sec-card">
-          <h2 class="sec-title">使用天数</h2>
+          <h2 class="sec-title">{{ t('achievement.daysTitle') }}</h2>
           <div class="day-count">{{ daysSinceLogin }}</div>
-          <div class="sec-meta day-label">
-            自 {{ auth.session ? new Date(auth.session.loginAt).toLocaleDateString('zh-CN') : '—' }} 起
-          </div>
+          <div class="sec-meta day-label">{{ sinceLabel }}</div>
         </section>
 
         <section class="sec-card">
-          <h2 class="sec-title">下一个成就</h2>
+          <h2 class="sec-title">{{ t('achievement.nextTitle') }}</h2>
           <template v-if="nextBadge">
             <div class="next-name">{{ nextBadge.name }}</div>
             <div class="next-desc">{{ nextBadge.desc }}</div>
@@ -168,7 +196,7 @@ const nextBadge = computed(() => badges.value.find((b) => !b.unlocked) ?? null)
               :stroke-width="8"
             />
           </template>
-          <el-empty v-else description="全部成就已解锁" :image-size="72" />
+          <el-empty v-else :description="t('achievement.allUnlocked')" :image-size="72" />
         </section>
       </aside>
     </div>
@@ -191,7 +219,7 @@ const nextBadge = computed(() => badges.value.find((b) => !b.unlocked) ?? null)
 }
 
 .stat-row {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   margin-bottom: 0;
 }
 
@@ -203,7 +231,7 @@ const nextBadge = computed(() => badges.value.find((b) => !b.unlocked) ?? null)
 }
 
 .ach-progress {
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .badge-grid {
@@ -240,7 +268,7 @@ const nextBadge = computed(() => badges.value.find((b) => !b.unlocked) ?? null)
 }
 
 .badge-name {
-  margin-top: 10px;
+  margin-top: 8px;
   font-size: 13px;
   font-weight: 500;
   color: var(--text);
@@ -255,12 +283,12 @@ const nextBadge = computed(() => badges.value.find((b) => !b.unlocked) ?? null)
 }
 
 .badge-progress {
-  margin-top: 10px;
+  margin-top: 8px;
   width: 100%;
 }
 
 .badge-done {
-  margin-top: 10px;
+  margin-top: 8px;
   font-size: 12px;
   color: var(--accent);
 }
@@ -291,7 +319,7 @@ const nextBadge = computed(() => badges.value.find((b) => !b.unlocked) ?? null)
 }
 
 .next-desc {
-  margin: 6px 0 12px;
+  margin: 8px 0 12px;
   font-size: 12px;
   color: var(--text-3);
 }

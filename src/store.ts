@@ -5,6 +5,7 @@ import * as bridge from './bridge'
 import type { CloseAction } from './bridge'
 import { ensurePlugin, runWebCommand, WEB_COMMAND_MAP } from './web-executor'
 import { toastError, toastWarning } from './notify'
+import { t } from './i18n'
 import { interpolate, declaresElement, declareKind, isDeclareKey, refsIn, type VariableDecl, type VarKind } from './vars'
 import {
   groupElements,
@@ -232,7 +233,7 @@ export const useAppStore = defineStore('app', {
       try {
         await bridge.setCloseAction(action)
       } catch (err) {
-        toastError(`保存设置失败：${err instanceof Error ? err.message : String(err)}`)
+        toastError(t('store.saveSettingsFail', { msg: err instanceof Error ? err.message : String(err) }))
       }
     },
     /** 选择新的数据位置并迁移数据；返回是否成功 */
@@ -246,7 +247,7 @@ export const useAppStore = defineStore('app', {
         await this.refreshFlows()
         return true
       } catch (err) {
-        toastError(`迁移数据失败：${err instanceof Error ? err.message : String(err)}`)
+        toastError(t('store.migrateFail', { msg: err instanceof Error ? err.message : String(err) }))
         return false
       }
     },
@@ -259,7 +260,7 @@ export const useAppStore = defineStore('app', {
         await this.refreshFlows()
         return true
       } catch (err) {
-        toastError(`恢复默认位置失败：${err instanceof Error ? err.message : String(err)}`)
+        toastError(t('store.resetLocationFail', { msg: err instanceof Error ? err.message : String(err) }))
         return false
       }
     },
@@ -269,8 +270,9 @@ export const useAppStore = defineStore('app', {
         await this.refreshFlows()
         await this.openFlow(meta.id)
       } catch (err) {
-        toastError(`新建应用失败：${err instanceof Error ? err.message : String(err)}`)
-        this.log('error', `新建应用失败：${String(err)}`)
+        const msg = err instanceof Error ? err.message : String(err)
+        toastError(t('store.createFail', { msg }))
+        this.log('error', `${t('store.createFail', { msg })}`)
       }
     },
     async openFlow(id: string) {
@@ -620,11 +622,11 @@ export const useAppStore = defineStore('app', {
       let value = name?.trim() ?? ''
       if (!value) {
         try {
-          const res = await ElMessageBox.prompt('请输入变量名称', '新增变量', {
-            confirmButtonText: '确定',
-            cancelButtonText: '取消',
+          const res = await ElMessageBox.prompt(t('designer.varNameRequired'), t('designer.addVar'), {
+            confirmButtonText: t('common.confirm'),
+            cancelButtonText: t('common.cancel'),
             inputPattern: /^[A-Za-z_\u4e00-\u9fa5][\w.\u4e00-\u9fa5]*$/,
-            inputErrorMessage: '变量名以字母、下划线或中文开头，可含数字、点号',
+            inputErrorMessage: t('store.varNameRule'),
           })
           value = String(res.value ?? '').trim()
         } catch {
@@ -633,7 +635,7 @@ export const useAppStore = defineStore('app', {
       }
       if (!value) return
       if (this.globalVars.some((v) => v.name === value)) {
-        toastWarning('变量「' + value + '」已存在', { title: '名称重复' })
+        toastWarning(t('designer.varExists', { name: value }), { title: t('designer.nameDup') })
         return
       }
       this.globalVars.push({ name: value, kind })
@@ -711,7 +713,7 @@ export const useAppStore = defineStore('app', {
       if (!el || !name) return false
       if (name === el.name) return true
       if (this.elements.some((e) => e.id !== id && e.name === name)) {
-        toastWarning('元素名已存在，请更换名称', { title: '名称重复' })
+        toastWarning(t('store.elementNameDup'), { title: t('designer.nameDup') })
         return false
       }
       const oldName = el.name
@@ -858,7 +860,7 @@ export const useAppStore = defineStore('app', {
       const flow = this.current
       if (!flow) return issues
       if (flow.nodes.length === 0) {
-        issues.push({ level: 'error', message: '流程为空，请先添加指令节点' })
+        issues.push({ level: 'error', message: t('store.issue.empty') })
         return issues
       }
       // 环检测（Kahn）
@@ -881,7 +883,7 @@ export const useAppStore = defineStore('app', {
           })
       }
       if (visited < flow.nodes.length) {
-        issues.push({ level: 'error', message: '流程存在循环依赖，请检查节点连线' })
+        issues.push({ level: 'error', message: t('store.issue.cycle') })
       }
       // 参数校验 + 变量引用校验
       // 已注释的步骤不会执行，其参数问题不应阻断整个流程，因此只对启用中的步骤校验
@@ -890,23 +892,23 @@ export const useAppStore = defineStore('app', {
         if (n.disabled) return
         const def = commandByType(n.type)
         if (!def) {
-          issues.push({ level: 'error', message: `节点「${n.name}」使用了未知指令类型 ${n.type}` })
+          issues.push({ level: 'error', message: t('store.issue.unknownType', { name: n.name, type: n.type }) })
           return
         }
         def.params.forEach((p) => {
           const value = n.props?.[p.key]
           const text = String(value ?? '').trim()
           if (p.type === 'string' && text === '') {
-            issues.push({ level: 'error', message: `节点「${n.name}」的参数「${p.label}」未填写` })
+            issues.push({ level: 'error', message: t('store.issue.paramRequired', { name: n.name, label: p.label }) })
           }
           if (p.type === 'number' && text !== '' && Number.isNaN(Number(text))) {
-            issues.push({ level: 'error', message: `节点「${n.name}」的参数「${p.label}」不是有效数字` })
+            issues.push({ level: 'error', message: t('store.issue.paramNumber', { name: n.name, label: p.label }) })
           }
           refsIn(text).forEach((ref) => {
             if (declared.has(ref)) return
             issues.push({
               level: 'error',
-              message: `节点「${n.name}」的参数「${p.label}」引用了未定义的变量 {{${ref}}}`,
+              message: t('store.issue.paramVar', { name: n.name, label: p.label, ref }),
             })
           })
         })
@@ -914,11 +916,11 @@ export const useAppStore = defineStore('app', {
       // 连线情况
       if (flow.nodes.length > 1) {
         if (flow.edges.length === 0) {
-          issues.push({ level: 'warn', message: '流程包含多个节点但没有任何连线，节点将按添加顺序执行' })
+          issues.push({ level: 'warn', message: t('store.issue.noLinks') })
         }
         flow.nodes.forEach((n) => {
           const linked = flow.edges.some((e) => e.from === n.id || e.to === n.id)
-          if (!linked) issues.push({ level: 'warn', message: `节点「${n.name}」没有连接任何连线` })
+          if (!linked) issues.push({ level: 'warn', message: t('store.issue.unlinked', { name: n.name }) })
         })
       }
       return issues
@@ -942,15 +944,15 @@ export const useAppStore = defineStore('app', {
       try {
         data = JSON.parse(raw)
       } catch {
-        throw new Error('文件已损坏或不是轻羽RPA流程文件')
+        throw new Error(t('store.importCorrupted'))
       }
       const envelope = data as { format?: string; flow?: Partial<Flow> }
       if (!envelope || envelope.format !== 'leafrpa' || !envelope.flow || typeof envelope.flow !== 'object') {
-        throw new Error('不是轻羽RPA流程文件，无法导入')
+        throw new Error(t('store.importNotFlow'))
       }
       const obj = envelope.flow
-      if (typeof obj.name !== 'string' || obj.name.trim() === '') throw new Error('缺少流程名称')
-      if (!Array.isArray(obj.nodes) || !Array.isArray(obj.edges)) throw new Error('缺少 nodes / edges 字段')
+      if (typeof obj.name !== 'string' || obj.name.trim() === '') throw new Error(t('store.importNoName'))
+      if (!Array.isArray(obj.nodes) || !Array.isArray(obj.edges)) throw new Error(t('store.importNoNodes'))
       const type: Flow['type'] = obj.type === 'mobile' || obj.type === 'instruction' ? obj.type : 'pc'
       const meta = await bridge.createFlow(obj.name.trim(), type)
       const idMap = new Map<string, string>()
@@ -1158,7 +1160,7 @@ export const useAppStore = defineStore('app', {
           this.log('error', `${node.name} 执行失败：${e instanceof Error ? e.message : String(e)}`)
           return false
         }
-        this.log('success', `${node.name} ✓`)
+        this.log('success', `${node.name} 完成`)
         const variable = str('variable')
         if (variable) this.vars[variable] = toVarString(data)
         if (declaresElement(node.type, 'variable') && variable) {

@@ -7,6 +7,7 @@
 import { computed, nextTick, ref } from 'vue'
 import { useAppStore } from '../store'
 import { insertRef, kindColor, splitRefs } from '../vars'
+import { t } from '../i18n'
 import VariablePicker from './VariablePicker.vue'
 
 const props = defineProps<{
@@ -129,7 +130,7 @@ function onPick(name: string) {
         <button
           class="vi-fx"
           :disabled="disabled"
-          :title="pickerVisible ? '收起变量' : '选择变量'"
+          :title="pickerVisible ? t('designer.hideVars') : t('designer.pickVar')"
           @mousedown.prevent
         >
           fx
@@ -157,7 +158,7 @@ function onPick(name: string) {
 /* 为右侧 fx 按钮预留位置，避免文字被遮挡 */
 .var-input :deep(.el-input__inner),
 .var-input :deep(.el-textarea__inner) {
-  padding-right: 30px;
+  padding-right: 32px;
 }
 
 /* 有变量引用且未聚焦时，真实文本透明，由浮层负责渲染 chip */
@@ -173,7 +174,7 @@ function onPick(name: string) {
   display: flex;
   align-items: center;
   overflow: hidden;
-  padding: 0 30px 0 11px;
+  padding: 0 32px 0 12px;
   font-size: 13px;
   line-height: 20px;
   color: var(--text);
@@ -183,7 +184,7 @@ function onPick(name: string) {
 
 .var-input.is-textarea .vi-mirror {
   align-items: flex-start;
-  padding-top: 6px;
+  padding-top: 8px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
@@ -191,7 +192,7 @@ function onPick(name: string) {
 
 .vi-fx {
   position: absolute;
-  right: 5px;
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 3;
@@ -211,7 +212,7 @@ function onPick(name: string) {
 }
 
 .var-input.is-textarea .vi-fx {
-  top: 6px;
+  top: 8px;
   transform: none;
 }
 

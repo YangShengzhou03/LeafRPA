@@ -139,7 +139,7 @@ vm.createContext(context);
 /* ---------------- 加载 content.js ---------------- */
 const code = fs.readFileSync(CONTENT_JS, 'utf8');
 vm.runInContext(code, context, { filename: 'content.js' });
-console.log('✓ content.js 加载成功');
+console.log('[OK] content.js 加载成功');
 
 /* ---------------- 测试 1：PICK 流程 ---------------- */
 const target = new El('button', { id: 'submit', class: 'btn primary', text: 'Submit' });
@@ -149,7 +149,7 @@ documentBody.appendChild(target);
 sent = [];
 let pickStartReply = null;
 onMessageFn({ type: 'leaf:pick-start', payload: {} }, {}, (r) => { pickStartReply = r; });
-console.log('✓ pick-start:', JSON.stringify(pickStartReply));
+console.log('[OK] pick-start:', JSON.stringify(pickStartReply));
 if (!pickStartReply || !pickStartReply.data?.started) throw new Error('pick-start 未返回 started');
 
 // 模拟悬停与点击（走 window 捕获监听器）；elementFromPoint 返回目标元素
@@ -162,7 +162,7 @@ fire('click', { target, clientX: 5, clientY: 5, preventDefault() {}, stopPropaga
 
 if (!sent.length) throw new Error('点击后未上报 leaf:element-picked');
 const picked = sent.find((m) => m.type === 'leaf:element-picked');
-console.log('✓ 抓取上报:', JSON.stringify(picked.payload).slice(0, 220));
+console.log('[OK] 抓取上报:', JSON.stringify(picked.payload).slice(0, 220));
 
 const info = picked.payload;
 const failures = [];
@@ -177,7 +177,7 @@ if (info.text !== 'Submit') failures.push('text 期望 Submit，实际 ' + info.
 sent = [];
 let getTextReply = null;
 onMessageFn({ type: 'leaf:get-text', payload: { selector: '#submit' } }, {}, (r) => { getTextReply = r; });
-console.log('✓ get-text(#submit) 响应:', JSON.stringify(getTextReply));
+console.log('[OK] get-text(#submit) 响应:', JSON.stringify(getTextReply));
 if (!getTextReply?.ok) throw new Error('get-text(#submit) 失败: ' + JSON.stringify(getTextReply));
 
 /* ---------------- 测试 3：framePath 定位 ---------------- */
@@ -200,7 +200,7 @@ onMessageFn(
   {},
   (r) => { frameReply = r; },
 );
-console.log('✓ get-text({css:#innerBtn, framePath:[0]}) 响应:', JSON.stringify(frameReply));
+console.log('[OK] get-text({css:#innerBtn, framePath:[0]}) 响应:', JSON.stringify(frameReply));
 if (!frameReply?.ok) failures.push('iframe 内选择器定位失败: ' + JSON.stringify(frameReply));
 
 // 无效 framePath 应返回明确错误而不是静默错元素
@@ -211,14 +211,14 @@ onMessageFn(
   {},
   (r) => { badFrameReply = r; },
 );
-console.log('✓ 无效 framePath 响应:', JSON.stringify(badFrameReply));
+console.log('[OK] 无效 framePath 响应:', JSON.stringify(badFrameReply));
 if (badFrameReply?.ok) failures.push('无效 framePath 应返回错误');
 
 /* ---------------- 结果 ---------------- */
 if (failures.length) {
-  console.error('\n✗ 断言失败:');
+  console.error('\n[FAIL] 断言失败:');
   for (const f of failures) console.error('  - ' + f);
   process.exit(1);
 }
-console.log('\n全部断言通过 ✓');
+console.log('\n全部断言通过 [OK]');
 console.log('  tagName =', info.tagName, '| cssSelector =', info.cssSelector, '| xpath =', info.xpath);

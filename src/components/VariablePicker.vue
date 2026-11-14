@@ -7,6 +7,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { useAppStore } from '../store'
 import { kindColor, kindLabel, type VarKind } from '../vars'
+import { t } from '../i18n'
 
 const props = defineProps<{
   /** 当前输入中已引用的变量（用于说明不会重复插入） */
@@ -61,7 +62,7 @@ defineExpose({ focusSearch })
 <template>
   <div class="var-picker">
     <div class="vp-search">
-      <el-input ref="searchRef" v-model="keyword" placeholder="搜索变量" size="small" clearable>
+      <el-input ref="searchRef" v-model="keyword" :placeholder="t('designer.searchVars')" clearable>
         <template #prefix>
           <el-icon :size="12"><Search /></el-icon>
         </template>
@@ -72,7 +73,7 @@ defineExpose({ focusSearch })
         v-for="v in filtered"
         :key="v.name"
         class="vp-item"
-        :title="`插入 {{${v.name}}}`"
+        :title="`${t('designer.insertRef')}{{${v.name}}}`"
         @click="pick(v.name)"
       >
         <span class="vp-dot" :style="{ background: kindColor(v.kind) }"></span>
@@ -81,18 +82,18 @@ defineExpose({ focusSearch })
       </button>
 
       <template v-if="runtimeOnly.length">
-        <div class="vp-group">运行期变量</div>
+        <div class="vp-group">{{ t('designer.runtimeVars') }}</div>
         <button v-for="name in runtimeOnly" :key="name" class="vp-item" @click="pick(name)">
           <span class="vp-dot" :style="{ background: 'var(--text-3)' }"></span>
           <span class="vp-name">{{ name }}</span>
-          <span class="vp-kind">{{ store.vars[name] ? '有值' : '空' }}</span>
+          <span class="vp-kind">{{ store.vars[name] ? t('designer.hasValue') : t('designer.emptyValue') }}</span>
         </button>
       </template>
 
       <el-empty
         v-if="!filtered.length && !runtimeOnly.length"
         :image-size="72"
-        description="暂无变量，可在右侧「全局变量」中添加"
+        :description="t('designer.noVars')"
       />
     </div>
   </div>
@@ -121,9 +122,9 @@ defineExpose({ focusSearch })
 .vp-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px;
   border: none;
   background: transparent;
   border-radius: 4px;
@@ -137,8 +138,8 @@ defineExpose({ focusSearch })
 }
 
 .vp-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -159,7 +160,7 @@ defineExpose({ focusSearch })
 }
 
 .vp-group {
-  padding: 6px 8px 2px;
+  padding: 8px 8px 4px;
   font-size: 11px;
   color: var(--text-3);
 }

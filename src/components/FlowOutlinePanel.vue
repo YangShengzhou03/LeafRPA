@@ -6,6 +6,7 @@ import { commandByType } from '../commands'
 import { useAppStore } from '../store'
 import { toastWarning } from '../notify'
 import { VAR_KINDS, kindColor, kindLabel, type VarKind } from '../vars'
+import { t } from '../i18n'
 
 const store = useAppStore()
 const activeLeaf = ref('main')
@@ -55,11 +56,11 @@ function openVarForm() {
 function confirmVar() {
   const name = varName.value.trim()
   if (!name) {
-    toastWarning('请输入变量名称', { title: '名称为空' })
+    toastWarning(t('designer.varNameRequired'), { title: t('common.nameEmpty') })
     return
   }
   if (store.globalVars.some((v) => v.name === name)) {
-    toastWarning('变量「' + name + '」已存在', { title: '名称重复' })
+    toastWarning(t('designer.varExists', { name }), { title: t('designer.nameDup') })
     return
   }
   store.upsertVar(name, varType.value)
@@ -70,12 +71,12 @@ async function clearVars() {
   if (store.globalVars.length === 0) return
   try {
     await ElMessageBox.confirm(
-      `确定清空全部 ${store.globalVars.length} 个全局变量？此操作不可恢复。`,
-      '清空变量',
+      t('designer.clearVarsConfirm', { n: store.globalVars.length }),
+      t('designer.clearVars'),
       {
         type: 'warning',
-        confirmButtonText: '清空',
-        cancelButtonText: '取消',
+        confirmButtonText: t('designer.clear'),
+        cancelButtonText: t('common.cancel'),
       },
     )
   } catch {
@@ -89,10 +90,10 @@ async function clearVars() {
   <aside class="outline">
     <div class="outline-block">
       <div class="outline-title-row">
-        <div class="outline-title">流程</div>
+        <div class="outline-title">{{ t('designer.flow') }}</div>
         <div class="title-actions">
           <el-tooltip
-            :content="searchVisible ? '关闭搜索' : '搜索节点'"
+            :content="searchVisible ? t('designer.closeSearch') : t('designer.searchNode')"
             placement="bottom"
             :show-after="300"
           >
@@ -104,19 +105,19 @@ async function clearVars() {
               <el-icon :size="13"><Search /></el-icon>
             </button>
           </el-tooltip>
-          <el-tooltip :content="flowExpanded ? '折叠' : '展开'" placement="bottom" :show-after="300">
+          <el-tooltip :content="flowExpanded ? t('designer.collapse') : t('designer.expand')" placement="bottom" :show-after="300">
             <button class="t-act" @click="flowExpanded = !flowExpanded">
               <el-icon :size="13"><Fold /></el-icon>
             </button>
           </el-tooltip>
           <el-dropdown trigger="click">
-            <button class="t-act" title="更多">
+            <button class="t-act" :title="t('common.more')">
               <el-icon :size="13"><MoreFilled /></el-icon>
             </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="flowExpanded = true">展开全部</el-dropdown-item>
-                <el-dropdown-item @click="flowExpanded = false">折叠全部</el-dropdown-item>
+                <el-dropdown-item @click="flowExpanded = true">{{ t('designer.expandAll') }}</el-dropdown-item>
+                <el-dropdown-item @click="flowExpanded = false">{{ t('designer.collapseAll') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -126,7 +127,7 @@ async function clearVars() {
       <div v-show="searchVisible" class="tree-search">
         <el-input
           v-model="keyword"
-          placeholder="搜索节点名称或描述"
+          :placeholder="t('designer.searchNodePlaceholder')"
           clearable
           :prefix-icon="Search"
         />
@@ -135,17 +136,17 @@ async function clearVars() {
       <div v-show="flowExpanded" class="tree">
         <div class="tree-root" :title="store.current?.name">
           <span class="plus">+</span>
-          <span class="root-name">{{ store.current?.name ?? '应用' }}</span>
+          <span class="root-name">{{ store.current?.name ?? t('designer.app') }}</span>
         </div>
         <div class="tree-children">
           <div class="tree-refs" :class="{ open: refsOpen }">
             <button class="tree-refs-title" @click="refsOpen = !refsOpen">
               <span class="tree-arrow">▸</span>
-              <span>引用</span>
+              <span>{{ t('designer.refs') }}</span>
               <span class="tree-refs-count">{{ instructionNodes.length }}</span>
             </button>
             <div v-show="refsOpen" class="tree-refs-list">
-              <div v-if="instructionNodes.length === 0" class="tree-refs-empty">暂无引用</div>
+              <div v-if="instructionNodes.length === 0" class="tree-refs-empty">{{ t('designer.noRefs') }}</div>
               <div
                 v-for="n in instructionNodes"
                 :key="n.id"
@@ -170,14 +171,14 @@ async function clearVars() {
             @click="activeLeaf = 'main'"
             @keydown.enter="activeLeaf = 'main'"
           >
-            主流程.flow
+            {{ t('designer.mainFlow') }}
           </div>
         </div>
 
         <el-empty
           v-if="visibleNodes.length === 0"
           :image-size="72"
-          :description="keyword ? '没有匹配的节点' : '流程暂无节点'"
+          :description="keyword ? t('designer.noMatchNode') : t('designer.noNodes')"
         />
         <button
           v-for="(node, i) in visibleNodes"
@@ -190,28 +191,28 @@ async function clearVars() {
           <span class="node-idx">{{ i + 1 }}</span>
           <span class="node-dot" :style="{ background: nodeColor(node.id) }"></span>
           <span class="node-name" :title="node.name">{{ node.name }}</span>
-          <span v-if="node.breakpoint" class="node-bp">断点</span>
+          <span v-if="node.breakpoint" class="node-bp">{{ t('designer.breakpoint') }}</span>
         </button>
       </div>
     </div>
 
     <div class="outline-block">
       <div class="outline-title-row">
-        <div class="outline-title">全局变量</div>
+        <div class="outline-title">{{ t('designer.globalVars') }}</div>
         <div class="title-actions">
-          <el-tooltip content="新增变量" placement="bottom" :show-after="300">
+          <el-tooltip :content="t('designer.addVar')" placement="bottom" :show-after="300">
             <button class="t-act" @click="openVarForm">
               <el-icon :size="13"><Plus /></el-icon>
             </button>
           </el-tooltip>
           <el-dropdown trigger="click">
-            <button class="t-act" title="更多">
+            <button class="t-act" :title="t('common.more')">
               <el-icon :size="13"><MoreFilled /></el-icon>
             </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="openVarForm">新增变量</el-dropdown-item>
-                <el-dropdown-item @click="clearVars">清空变量</el-dropdown-item>
+                <el-dropdown-item @click="openVarForm">{{ t('designer.addVar') }}</el-dropdown-item>
+                <el-dropdown-item @click="clearVars">{{ t('designer.clearVars') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -220,26 +221,26 @@ async function clearVars() {
       <div v-if="varFormOpen" class="var-form">
         <el-input
           v-model="varName"
-          placeholder="变量名称"
+          :placeholder="t('designer.varNameLabel')"
           @keydown.enter="confirmVar"
         />
         <el-select v-model="varType">
           <el-option v-for="k in VAR_KINDS" :key="k.kind" :label="k.label" :value="k.kind" />
         </el-select>
         <div class="var-form-actions">
-          <el-button @click="varFormOpen = false">取消</el-button>
-          <el-button type="primary" @click="confirmVar">添加</el-button>
+          <el-button @click="varFormOpen = false">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" @click="confirmVar">{{ t('designer.add') }}</el-button>
         </div>
       </div>
       <div class="var-head">
-        <span>变量名称</span>
-        <span>类型</span>
+        <span>{{ t('designer.colVarName') }}</span>
+        <span>{{ t('designer.colType') }}</span>
       </div>
       <div v-for="v in store.globalVars" :key="v.name" class="var-row">
         <span class="var-dot" :style="{ background: kindColor(v.kind) }"></span>
         <span class="var-name" :title="v.name">{{ v.name }}</span>
         <span class="var-type">{{ kindLabel(v.kind) }}</span>
-        <el-tooltip content="删除" placement="top" :show-after="300">
+        <el-tooltip :content="t('common.delete')" placement="top" :show-after="300">
           <button class="var-del" @click="store.removeGlobalVar(v.name)">
             <el-icon :size="12"><Delete /></el-icon>
           </button>
@@ -256,7 +257,7 @@ async function clearVars() {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   min-height: 0;
 }
 
@@ -266,7 +267,7 @@ async function clearVars() {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 12px 0 10px;
+  padding: 12px 0;
   overflow: hidden;
 }
 
@@ -283,7 +284,7 @@ async function clearVars() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px 8px 14px;
+  padding: 0 8px 8px 16px;
   flex-shrink: 0;
 }
 
@@ -298,13 +299,13 @@ async function clearVars() {
 .title-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
 .t-act {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border: none;
   background: transparent;
   border-radius: 4px;
@@ -331,8 +332,8 @@ async function clearVars() {
 .tree-root {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+  gap: 8px;
+  padding: 8px 16px;
   font-size: 13px;
   color: var(--text);
 }
@@ -350,7 +351,7 @@ async function clearVars() {
 }
 
 .tree-children {
-  padding-left: 26px;
+  padding-left: 24px;
 }
 
 .tree-refs-title {
@@ -358,11 +359,11 @@ async function clearVars() {
   align-items: center;
   gap: 4px;
   width: 100%;
-  padding: 6px 14px;
+  padding: 8px 16px;
   border: none;
   background: transparent;
-  border-radius: 6px;
-  margin: 1px 8px 1px 0;
+  border-radius: 8px;
+  margin: 0 8px 0 0;
   font-size: 13px;
   color: var(--text-2);
   text-align: left;
@@ -389,7 +390,7 @@ async function clearVars() {
   color: var(--text-3);
   background: var(--hover);
   border-radius: 8px;
-  padding: 0 6px;
+  padding: 0 4px;
   line-height: 16px;
 }
 
@@ -398,14 +399,14 @@ async function clearVars() {
 }
 
 .tree-refs-empty {
-  padding: 4px 14px;
+  padding: 4px 16px;
   font-size: 12px;
   color: var(--text-3);
 }
 
 .ref-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--accent);
   flex-shrink: 0;
@@ -422,12 +423,12 @@ async function clearVars() {
 .tree-leaf {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+  gap: 8px;
+  padding: 8px 16px;
   font-size: 13px;
   color: var(--text-2);
-  border-radius: 6px;
-  margin: 1px 8px 1px 0;
+  border-radius: 8px;
+  margin: 0 8px 0 0;
   cursor: pointer;
 }
 
@@ -444,13 +445,13 @@ async function clearVars() {
 .node-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: calc(100% - 16px);
-  margin: 1px 8px 1px 0;
-  padding: 6px 10px 6px 14px;
+  margin: 0 8px 0 0;
+  padding: 8px 12px 8px 16px;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
   color: var(--text-2);
   text-align: left;
@@ -478,8 +479,8 @@ async function clearVars() {
 }
 
 .node-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -501,20 +502,20 @@ async function clearVars() {
 .var-form {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding: 0 12px 8px;
 }
 
 .var-form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 8px;
 }
 
 .var-head {
   display: flex;
   align-items: center;
-  padding: 6px 14px;
+  padding: 8px 16px;
   font-size: 12px;
   color: var(--text-3);
 }
@@ -530,15 +531,15 @@ async function clearVars() {
 .var-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px 6px 14px;
+  gap: 8px;
+  padding: 8px 8px 8px 16px;
   font-size: 12px;
   color: var(--text-2);
 }
 
 .var-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -595,7 +596,7 @@ async function clearVars() {
 }
 
 .var-empty-line {
-  margin: 6px 14px 0;
+  margin: 8px 16px 0;
   height: 1px;
   background: var(--border);
 }

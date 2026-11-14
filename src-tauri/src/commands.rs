@@ -94,6 +94,7 @@ fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 /// 读取应用设置，文件缺失或损坏时返回默认值。
+#[must_use]
 pub fn load_settings(app: &AppHandle) -> AppSettings {
     settings_path(app)
         .ok()
@@ -303,6 +304,7 @@ pub fn data_dir(app: AppHandle) -> Result<String, String> {
 
 /// 返回应用设置（数据根目录 + 关闭按钮行为）。
 #[tauri::command]
+#[must_use]
 pub fn get_settings(app: AppHandle) -> AppSettings {
     load_settings(&app)
 }
@@ -332,7 +334,7 @@ pub fn set_data_root(app: AppHandle, path: String) -> Result<String, String> {
     let trimmed = path.trim().to_string();
     let mut settings = load_settings(&app);
     let old_dir = flows_dir(&app)?;
-    settings.data_root = trimmed.clone();
+    settings.data_root.clone_from(&trimmed);
     save_settings(&app, &settings)?;
 
     let new_dir = flows_dir(&app)?;
@@ -360,6 +362,7 @@ pub fn set_data_root(app: AppHandle, path: String) -> Result<String, String> {
 
 /// 弹出系统目录选择对话框（独立线程执行，避免阻塞主线程）。
 #[tauri::command(async)]
+#[must_use]
 pub fn pick_folder() -> Option<String> {
     rfd::FileDialog::new()
         .set_title("选择数据存储位置")
@@ -411,7 +414,7 @@ pub fn take_element_editor_data(
 ///
 /// 窗口已存在时聚焦并重新加载，让前端重新读取最新数据。
 ///
-/// 必须声明为 async：同步 command 在主线程执行，而 Windows 上创建 WebView2
+/// 必须声明为 async：同步 command 在主线程执行，而 Windows 上创建 `WebView2`
 /// 需要主线程消息循环可重入，否则窗口会卡在空白/不显示。
 ///
 /// # Errors

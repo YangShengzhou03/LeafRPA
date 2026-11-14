@@ -1,147 +1,91 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useAppStore } from '../store'
-import { toastSuccess } from '../notify'
+import { useAuthStore } from '../auth'
+import { userApi, type UserProfileFull } from '../api'
+import { avatarSrcOrInitial } from '../avatar'
+import { t } from '../i18n'
 import PageShell from '../components/PageShell.vue'
 
 const store = useAppStore()
+const auth = useAuthStore()
 
-interface Plan {
-  key: string
-  name: string
-  price: string
-  period: string
-  quota: string
-  highlight: boolean
-  features: string[]
-}
+/* 当前用户资料：昵称 / 头像来自服务端，未登录或离线时回退本地会话 */
+const profile = ref<UserProfileFull | null>(null)
 
-const plans: Plan[] = [
-  {
-    key: 'starter',
-    name: '创业版',
-    price: '免费',
-    period: '永久',
-    quota: '每日 100 次运行',
-    highlight: false,
-    features: ['网页自动化指令', '桌面自动化指令', '定时 / 循环触发器', '社区支持'],
-  },
-  {
-    key: 'pro',
-    name: '专业版',
-    price: '¥39',
-    period: '每月',
-    quota: '每日 2000 次运行',
-    highlight: true,
-    features: [
-      '包含创业版全部能力',
-      '子流程与智能录制',
-      'Python 代码节点',
-      '优先邮件支持',
-      '数据导出 / 导入',
-    ],
-  },
-  {
-    key: 'ultimate',
-    name: '旗舰版',
-    price: '¥99',
-    period: '每月',
-    quota: '不限次数运行',
-    highlight: false,
-    features: [
-      '包含专业版全部能力',
-      '多设备同步',
-      '专属客户成功经理',
-      '私有化部署支持',
-      '定制指令开发',
-    ],
-  },
-]
-
-const currentPlan = computed(() => plans[0])
-
-const usagePercent = computed(() => {
-  const flows = store.flows.length
-  return Math.min(100, Math.round((flows / 10) * 100))
+onMounted(async () => {
+  if (!auth.isLoggedIn) return
+  try {
+    profile.value = await userApi.me()
+  } catch {
+    profile.value = null
+  }
 })
 
-function upgrade(plan: Plan) {
-  if (plan.key === currentPlan.value.key) {
-    toastSuccess('你当前正在使用该套餐')
-    return
-  }
-  store.navigate('service')
-}
+const displayName = computed(() => {
+  if (profile.value) return profile.value.nickname || profile.value.username
+  return auth.session?.username ?? ''
+})
+
+/* 头像：有自定义图片 URL 用图片，否则回退用户名首字；加载失败时同样回退 */
+const avatar = computed(() => avatarSrcOrInitial(profile.value?.avatarUrl, displayName.value))
+const avatarImgFailed = ref(false)
+watch(() => avatar.value.src, () => {
+  avatarImgFailed.value = false
+})
+
+/* 真实用量数据：本地流程数与运行日志条数（无虚构额度与百分比） */
+const usageStats = computed(() => [
+  { label: t('stats.flows'), value: store.flows.length, suffix: t('stats.flowsUnit') },
+  { label: t('stats.logs'), value: store.logs.length, suffix: t('stats.logsUnit') },
+])
 </script>
 
 <template>
-  <PageShell title="增值服务" kicker="会员套餐" sub="选择适合你的套餐，获得更高的运行额度与更多能力">
+  <PageShell :title="t('vip.title')" :kicker="t('vip.kicker')" :sub="t('vip.sub')">
     <div class="vip-layout">
-      <div class="plan-grid">
-        <section
-          v-for="p in plans"
-          :key="p.key"
-          class="sec-card plan-card"
-          :class="{ highlight: p.highlight }"
-        >
-          <div v-if="p.highlight" class="plan-flag">推荐</div>
-          <div class="plan-head">
-            <div class="plan-name">{{ p.name }}</div>
-            <span v-if="currentPlan.key === p.key" class="sec-meta">当前套餐</span>
+      <div class="vip-main">
+        <section class="sec-card">
+          <h2 class="sec-title">{{ t('vip.currentVersion') }}</h2>
+          <div class="plan-current">
+            <span class="current-avatar">
+              <img
+                v-if="avatar.src && !avatarImgFailed"
+                :src="avatar.src"
+                alt=""
+                @error="avatarImgFailed = true"
+              />
+              <template v-else>{{ avatar.initial }}</template>
+            </span>
+            <div class="current-info">
+              <div class="current-name">{{ displayName || t('vip.notLoggedIn') }}</div>
+              <div class="sec-meta">{{ auth.session?.username || t('vip.loginHint') }}</div>
+            </div>
+            <span class="current-badge">{{ t('vip.freeBadge') }}</span>
           </div>
-          <div class="plan-price">
-            <span class="plan-amount">{{ p.price }}</span>
-            <span class="sec-meta">{{ p.period }}</span>
+          <p class="sec-meta plan-hint">{{ t('vip.freeHint') }}</p>
+        </section>
+
+        <section class="sec-card">
+          <div class="sec-card-head">
+            <h2 class="sec-title">{{ t('vip.paidPlans') }}</h2>
           </div>
-          <div class="plan-quota">{{ p.quota }}</div>
-          <ul class="plan-features">
-            <li v-for="f in p.features" :key="f">{{ f }}</li>
-          </ul>
-          <el-button v-if="p.key === currentPlan.key" class="plan-btn" disabled>
-            当前套餐
-          </el-button>
-          <el-button
-            v-else
-            class="plan-btn"
-            :type="p.highlight ? 'primary' : 'default'"
-            plain
-            @click="upgrade(p)"
-          >
-            联系客服开通
-          </el-button>
+          <el-empty :image-size="88" :description="t('vip.paidEmpty')" />
+          <p class="sec-meta plan-hint">{{ t('vip.paidHint') }}</p>
         </section>
       </div>
 
       <aside class="vip-side">
         <section class="sec-card">
-          <h2 class="sec-title">当前额度</h2>
-          <div class="usage-body">
-            <el-progress :percentage="usagePercent" :stroke-width="10" />
-            <div class="sec-meta">
-              已创建 {{ store.flows.length }} 个流程，占用今日额度 {{ usagePercent }}%
+          <h2 class="sec-title">{{ t('vip.usageTitle') }}</h2>
+          <div class="usage-rows">
+            <div v-for="s in usageStats" :key="s.label" class="usage-row">
+              <span class="usage-label">{{ s.label }}</span>
+              <span class="usage-value">
+                {{ s.value }}<span class="usage-suffix">{{ s.suffix }}</span>
+              </span>
             </div>
           </div>
-        </section>
-
-        <section class="sec-card">
-          <h2 class="sec-title">开通说明</h2>
-          <ol class="steps">
-            <li class="step">
-              <span class="step-no">1</span>
-              <div class="step-name">提交申请</div>
-              <div class="step-desc">点击套餐上的「联系客服开通」，我们会生成一份开通申请</div>
-            </li>
-            <li class="step">
-              <span class="step-no">2</span>
-              <div class="step-name">客服确认</div>
-              <div class="step-desc">客服会在 1 个工作日内与你确认套餐与支付方式</div>
-            </li>
-            <li class="step">
-              <span class="step-no">3</span>
-              <div class="step-name">生效</div>
-              <div class="step-desc">完成支付后，新额度会立即生效并发送通知</div>
-            </li>
-          </ol>
         </section>
       </aside>
     </div>
@@ -156,110 +100,107 @@ function upgrade(plan: Plan) {
   align-items: start;
 }
 
-.plan-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.plan-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-}
-
-.plan-card.highlight {
-  border-color: var(--accent);
-}
-
-.plan-flag {
-  position: absolute;
-  top: -1px;
-  right: 16px;
-  padding: 2px 10px;
-  border-radius: 0 0 6px 6px;
-  background: var(--accent);
-  color: var(--el-color-white);
-  font-size: 11px;
-}
-
-.plan-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.plan-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.plan-price {
-  margin-top: 12px;
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.plan-amount {
-  font-size: 26px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.plan-card.highlight .plan-amount {
-  color: var(--accent);
-}
-
-.plan-quota {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--text-2);
-}
-
-.plan-features {
-  list-style: none;
-  margin: 14px 0 16px;
-  padding: 12px 0 0;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex: 1;
-}
-
-.plan-features li {
-  position: relative;
-  padding-left: 16px;
-  font-size: 13px;
-  color: var(--text-2);
-  line-height: 1.5;
-}
-
-.plan-features li::before {
-  content: '✓';
-  position: absolute;
-  left: 0;
-  color: var(--accent);
-}
-
-.plan-btn {
-  width: 100%;
-}
-
+.vip-main,
 .vip-side {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
 
-.usage-body {
+/* 当前版本卡片：头像 + 昵称 + 版本徽标 */
+.plan-current {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.current-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+  flex-shrink: 0;
+  overflow: hidden;
+  user-select: none;
+}
+
+.current-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.current-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.current-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.current-badge {
+  flex-shrink: 0;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.plan-hint {
+  margin: 12px 0 0;
+}
+
+/* 使用数据：真实计数，无虚构进度条 */
+.usage-rows {
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
+}
+
+.usage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  border-top: 1px solid var(--border);
+}
+
+.usage-row:first-child {
+  border-top: none;
+}
+
+.usage-label {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.usage-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.usage-suffix {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
 }
 </style>

@@ -14,12 +14,16 @@ import {
 } from '@element-plus/icons-vue'
 import { useAppStore } from '../store'
 import * as bridge from '../bridge'
+import { flowShareApi, ApiError } from '../api'
+import { useAuthStore } from '../auth'
 import type { FlowMeta } from '../types'
 import { toastError, toastSuccess, toastWarning } from '../notify'
+import { t } from '../i18n'
 
-type AppView = '' | 'rename' | 'release'
+type AppView = '' | 'rename' | 'release' | 'share'
 
 const store = useAppStore()
+const auth = useAuthStore()
 
 const selectedId = ref<string | null>(null)
 const keyword = ref('')
@@ -56,11 +60,11 @@ function relTime(ts: number): string {
   const min = 60_000
   const hour = 60 * min
   const day = 24 * hour
-  if (diff < min) return '刚刚'
-  if (diff < hour) return `${Math.floor(diff / min)}分钟前`
-  if (diff < day) return `${Math.floor(diff / hour)}小时前`
-  if (diff < 30 * day) return `${Math.floor(diff / day)}天前`
-  return `${Math.max(1, Math.floor(diff / (30 * day)))}个月前`
+  if (diff < min) return t('common.justNow')
+  if (diff < hour) return t('common.minAgo', { n: Math.floor(diff / min) })
+  if (diff < day) return t('common.hourAgo', { n: Math.floor(diff / hour) })
+  if (diff < 30 * day) return t('common.dayAgo', { n: Math.floor(diff / day) })
+  return t('common.monthAgo', { n: Math.max(1, Math.floor(diff / (30 * day))) })
 }
 
 function selectRow(id: string) {
@@ -73,7 +77,7 @@ function openApp(app: FlowMeta) {
 
 function ensureSelected(): FlowMeta | null {
   if (!selected.value) {
-    toastWarning('请先选择一个应用', { title: '未选择应用' })
+    toastWarning(t('apps.selectFirst'), { title: t('apps.noSelection') })
     return null
   }
   return selected.value
@@ -136,7 +140,7 @@ async function confirmRelease() {
   if (!app) return
   const version = releaseVersion.value.trim()
   if (!version) {
-    toastWarning('请输入版本号', { title: '版本号为空' })
+    toastWarning(t('apps.versionRequired'), { title: t('apps.versionEmpty') })
     return
   }
   publishedMap.value = {
@@ -145,32 +149,74 @@ async function confirmRelease() {
   }
   savePublished()
   view.value = ''
-  toastSuccess(`已发布 ${app.name} v${version}`, { title: '发布成功', duration: 2600 })
+  toastSuccess(t('apps.publishedOk', { name: app.name, version }), { title: t('apps.publishOk'), duration: 2600 })
 }
 
 async function onShare() {
   const app = ensureSelected()
   if (!app) return
+  shareApp.value = app
+  shareName.value = app.name
+  shareDesc.value = ''
+  shareMode.value = 'cloud'
+  view.value = 'share'
+}
+
+/* ---------- 分享流程 ---------- */
+const shareApp = ref<FlowMeta | null>(null)
+const shareMode = ref<'cloud' | 'file'>('cloud')
+const shareName = ref('')
+const shareDesc = ref('')
+const sharing = ref(false)
+
+function buildEnvelope(flow: unknown): string {
+  return JSON.stringify(
+    { format: 'leafrpa', version: 1, exportedAt: new Date().toISOString(), flow },
+    null,
+    2,
+  )
+}
+
+async function confirmShare() {
+  const app = shareApp.value
+  if (!app) return
+  sharing.value = true
   try {
     const flow = await bridge.readFlow(app.id)
-    const envelope = {
-      format: 'leafrpa',
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      flow,
+    const envelope = buildEnvelope(flow)
+    if (shareMode.value === 'cloud') {
+      if (!auth.session) {
+        toastWarning(t('apps.loginToUpload'), { title: t('common.notLoggedIn') })
+        return
+      }
+      const name = shareName.value.trim()
+      if (!name) {
+        toastWarning(t('apps.nameRequired'), { title: t('common.nameEmpty') })
+        return
+      }
+      await flowShareApi.upload(name, shareDesc.value.trim(), flow.nodes.length, `${name}.leafrpa`, envelope)
+      toastSuccess(t('apps.uploadedOk'), { title: t('apps.shareOk'), duration: 2800 })
+    } else {
+      const blob = new Blob([envelope], { type: 'application/octet-stream' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${app.name}.leafrpa`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toastSuccess(t('apps.fileSaved'), { title: t('apps.shareReady'), duration: 2800 })
     }
-    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/octet-stream' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${app.name}.leafrpa`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-    toastSuccess('流程文件已保存，在其它设备的设计器中「导入」即可使用', { title: '分享就绪', duration: 2800 })
-  } catch {
-    toastError('文件保存失败，请重试', { title: '分享失败' })
+    view.value = ''
+  } catch (err) {
+    if (err instanceof ApiError && err.offline) {
+      toastError(t('apps.offlineCloud'), { title: t('apps.shareFailed') })
+    } else {
+      toastError(err instanceof Error ? err.message : t('apps.shareFailedRetry'), { title: t('apps.shareFailed') })
+    }
+  } finally {
+    sharing.value = false
   }
 }
 
@@ -188,21 +234,21 @@ async function confirmRename() {
   const app = selected.value
   if (!app) return
   if (!renameDraft.value.trim()) {
-    toastWarning('应用名称不能为空', { title: '名称为空' })
+    toastWarning(t('apps.renameRequired'), { title: t('common.nameEmpty') })
     return
   }
   await store.renameFlow(renameDraft.value, app.id)
   view.value = ''
-  toastSuccess('重命名成功', { title: '应用已重命名', duration: 2000 })
+  toastSuccess(t('apps.renamedOk'), { title: t('apps.renamedTitle'), duration: 2000 })
 }
 
 async function onDelete() {
   const app = ensureSelected()
   if (!app) return
   try {
-    await ElMessageBox.confirm(`确定删除应用「${app.name}」吗？删除后不可恢复。`, '删除确认', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(t('apps.deleteConfirm', { name: app.name }), t('sidebar.deleteTitle'), {
+      confirmButtonText: t('common.delete'),
+      cancelButtonText: t('common.cancel'),
       type: 'warning',
     })
   } catch {
@@ -210,11 +256,11 @@ async function onDelete() {
   }
   if (selectedId.value === app.id) selectedId.value = null
   await store.removeFlow(app.id)
-  toastSuccess('删除成功', { title: '应用已删除', duration: 2000 })
+  toastSuccess(t('apps.deleteOk'), { title: t('apps.deletedTitle'), duration: 2000 })
 }
 
 function createApp() {
-  void store.createAndOpen(`未命名应用 ${store.flows.length + 1}`, 'pc')
+  void store.createAndOpen(t('sidebar.untitledApp', { n: store.flows.length + 1 }), 'pc')
 }
 </script>
 
@@ -222,33 +268,33 @@ function createApp() {
   <section class="apps-page">
     <template v-if="!view">
     <div class="apps-head">
-      <h1 class="apps-title">我开发的应用</h1>
+      <h1 class="apps-title">{{ t('sidebar.myDeveloped') }}</h1>
       <div class="apps-actions">
-        <el-tooltip content="运行" placement="bottom" :show-after="300">
-          <el-button :icon="VideoPlay" @click="onRun">运行</el-button>
+        <el-tooltip :content="t('apps.tipRun')" placement="bottom" :show-after="300">
+          <el-button :icon="VideoPlay" @click="onRun">{{ t('apps.tipRun') }}</el-button>
         </el-tooltip>
-        <el-tooltip content="编辑" placement="bottom" :show-after="300">
-          <el-button :icon="EditPen" @click="onEdit">编辑</el-button>
+        <el-tooltip :content="t('apps.tipEdit')" placement="bottom" :show-after="300">
+          <el-button :icon="EditPen" @click="onEdit">{{ t('apps.tipEdit') }}</el-button>
         </el-tooltip>
-        <el-tooltip content="发版" placement="bottom" :show-after="300">
-          <el-button :icon="Upload" @click="onRelease">发版</el-button>
+        <el-tooltip :content="t('apps.tipRelease')" placement="bottom" :show-after="300">
+          <el-button :icon="Upload" @click="onRelease">{{ t('apps.tipRelease') }}</el-button>
         </el-tooltip>
-        <el-tooltip content="保存流程文件分享" placement="bottom" :show-after="300">
-          <el-button :icon="Share" @click="onShare">分享</el-button>
+        <el-tooltip :content="t('apps.tipShare')" placement="bottom" :show-after="300">
+          <el-button :icon="Share" @click="onShare">{{ t('apps.tipShare') }}</el-button>
         </el-tooltip>
         <el-dropdown trigger="click" @command="(cmd: string) => (cmd === 'rename' ? onRename() : onDelete())">
-          <el-button :icon="MoreFilled" title="更多" />
+          <el-button :icon="MoreFilled" :title="t('common.more')" />
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="rename">重命名</el-dropdown-item>
-              <el-dropdown-item command="delete">删除</el-dropdown-item>
+              <el-dropdown-item command="rename">{{ t('apps.rename') }}</el-dropdown-item>
+              <el-dropdown-item command="delete">{{ t('common.delete') }}</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
         <el-input
           v-model="keyword"
           class="apps-search"
-          placeholder="搜索应用"
+          :placeholder="t('apps.searchPlaceholder')"
           clearable
           :prefix-icon="Search"
         />
@@ -259,9 +305,9 @@ function createApp() {
       v-if="apps.length === 0"
       class="apps-empty"
       :image-size="96"
-      :description="keyword ? '没有匹配的应用' : '还没有应用，快来创建第一个自动化应用吧'"
+      :description="keyword ? t('apps.emptyMatch') : t('apps.emptyNone')"
     >
-      <el-button v-if="!keyword" type="primary" @click="createApp">新建应用</el-button>
+      <el-button v-if="!keyword" type="primary" @click="createApp">{{ t('apps.create') }}</el-button>
     </el-empty>
 
     <table v-else class="table app-table">
@@ -270,12 +316,12 @@ function createApp() {
           <th
             class="sortable th-name"
             tabindex="0"
-            title="点击或按回车排序"
+            :title="t('apps.sortTip')"
             @click="toggleSort('name')"
             @keydown.enter="toggleSort('name')"
             @keydown.space.prevent="toggleSort('name')"
           >
-            应用名称
+            {{ t('apps.colName') }}
             <el-icon :size="12" class="sort-ico" :class="{ on: sortKey === 'name' }">
               <CaretTop v-if="sortKey === 'name' && sortOrder === 'desc'" />
               <CaretBottom v-else />
@@ -284,18 +330,18 @@ function createApp() {
           <th
             class="sortable th-time"
             tabindex="0"
-            title="点击或按回车排序"
+            :title="t('apps.sortTip')"
             @click="toggleSort('updatedAt')"
             @keydown.enter="toggleSort('updatedAt')"
             @keydown.space.prevent="toggleSort('updatedAt')"
           >
-            更新时间
+            {{ t('apps.colUpdated') }}
             <el-icon :size="12" class="sort-ico" :class="{ on: sortKey === 'updatedAt' }">
               <CaretTop v-if="sortKey === 'updatedAt' && sortOrder === 'desc'" />
               <CaretBottom v-else />
             </el-icon>
           </th>
-          <th class="th-status">编辑状态</th>
+          <th class="th-status">{{ t('apps.colStatus') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -304,7 +350,7 @@ function createApp() {
           :key="app.id"
           :class="{ picked: app.id === selectedId }"
           tabindex="0"
-          title="单击选中，双击打开，回车打开"
+          :title="t('apps.rowTip')"
           @click="selectRow(app.id)"
           @dblclick="openApp(app)"
           @keydown.enter="openApp(app)"
@@ -312,7 +358,7 @@ function createApp() {
         >
           <td>
             <div class="app-cell">
-              <span class="app-thumb">{{ app.name.charAt(0) || '应' }}</span>
+              <span class="app-thumb">{{ app.name.charAt(0) || t('apps.thumbFallback') }}</span>
               <span class="app-name" :title="app.name">{{ app.name }}</span>
             </div>
           </td>
@@ -320,11 +366,11 @@ function createApp() {
           <td>
             <span v-if="publishedMap[app.id]" class="edit-status released">
               <el-icon :size="13"><Upload /></el-icon>
-              已发布 v{{ publishedMap[app.id].version }}
+              {{ t('apps.released', { version: publishedMap[app.id].version }) }}
             </span>
             <span v-else class="edit-status">
               <el-icon :size="13"><EditPen /></el-icon>
-              编辑中
+              {{ t('apps.editing') }}
             </span>
           </td>
         </tr>
@@ -334,49 +380,88 @@ function createApp() {
 
     <template v-else-if="view === 'rename'">
       <div class="detail-nav">
-        <el-button text :icon="ArrowLeft" @click="view = ''">返回应用列表</el-button>
+        <el-button text :icon="ArrowLeft" @click="view = ''">{{ t('apps.back') }}</el-button>
       </div>
       <div class="form-card sec-card">
-        <h2 class="form-title">重命名应用</h2>
+        <h2 class="form-title">{{ t('apps.renameTitle') }}</h2>
         <el-form label-position="top">
-          <el-form-item label="应用名称">
+          <el-form-item :label="t('apps.labelName')">
             <el-input
               v-model="renameDraft"
-              placeholder="输入新的应用名称"
+              :placeholder="t('apps.namePlaceholder')"
               maxlength="50"
               @keydown.enter="confirmRename"
             />
           </el-form-item>
         </el-form>
         <div class="form-actions">
-          <el-button @click="view = ''">取消</el-button>
-          <el-button type="primary" @click="confirmRename">确定</el-button>
+          <el-button @click="view = ''">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" @click="confirmRename">{{ t('common.confirm') }}</el-button>
         </div>
       </div>
     </template>
 
     <template v-else-if="view === 'release'">
       <div class="detail-nav">
-        <el-button text :icon="ArrowLeft" @click="view = ''">返回应用列表</el-button>
+        <el-button text :icon="ArrowLeft" @click="view = ''">{{ t('apps.back') }}</el-button>
       </div>
       <div class="form-card sec-card">
-        <h2 class="form-title">发布应用</h2>
+        <h2 class="form-title">{{ t('apps.releaseTitle') }}</h2>
         <el-form label-position="top">
-          <el-form-item label="应用名称">
+          <el-form-item :label="t('apps.labelName')">
             <el-input :model-value="releaseApp?.name ?? ''" disabled />
           </el-form-item>
-          <el-form-item label="版本号">
-            <el-input v-model="releaseVersion" placeholder="例如 1.0.0" />
+          <el-form-item :label="t('apps.labelVersion')">
+            <el-input v-model="releaseVersion" :placeholder="t('apps.versionPlaceholder')" />
           </el-form-item>
-          <el-form-item label="说明">
+          <el-form-item :label="t('apps.labelNote')">
             <span class="release-note">
-              发布信息保存在本地，应用列表会展示当前版本状态；演示版本不包含云端同步。
+              {{ t('apps.releaseNote') }}
             </span>
           </el-form-item>
         </el-form>
         <div class="form-actions">
-          <el-button @click="view = ''">取消</el-button>
-          <el-button type="primary" @click="confirmRelease">确认发布</el-button>
+          <el-button @click="view = ''">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" @click="confirmRelease">{{ t('apps.confirmPublish') }}</el-button>
+        </div>
+      </div>
+    </template>
+    <template v-else-if="view === 'share'">
+      <div class="detail-nav">
+        <el-button text :icon="ArrowLeft" @click="view = ''">{{ t('apps.back') }}</el-button>
+      </div>
+      <div class="form-card sec-card">
+        <h2 class="form-title">{{ t('apps.shareTitle') }}</h2>
+        <el-form label-position="top">
+          <el-form-item :label="t('apps.labelMode')">
+            <el-radio-group v-model="shareMode">
+              <el-radio-button value="cloud">{{ t('apps.modeCloud') }}</el-radio-button>
+              <el-radio-button value="file">{{ t('apps.modeFile') }}</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item :label="t('apps.labelFlowName')">
+            <el-input v-model="shareName" maxlength="120" :placeholder="t('apps.flowNamePlaceholder')" />
+          </el-form-item>
+          <el-form-item v-if="shareMode === 'cloud'" :label="t('apps.labelDesc')">
+            <el-input
+              v-model="shareDesc"
+              type="textarea"
+              :rows="3"
+              maxlength="255"
+              :placeholder="t('apps.descPlaceholder')"
+            />
+          </el-form-item>
+          <el-form-item :label="t('apps.labelNote')">
+            <span class="release-note">
+              {{ shareMode === 'cloud' ? t('apps.cloudNote') : t('apps.fileNote') }}
+            </span>
+          </el-form-item>
+        </el-form>
+        <div class="form-actions">
+          <el-button @click="view = ''">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" :loading="sharing" @click="confirmShare">
+            {{ shareMode === 'cloud' ? t('apps.uploadBtn') : t('apps.saveBtn') }}
+          </el-button>
         </div>
       </div>
     </template>
@@ -495,14 +580,14 @@ function createApp() {
 .app-cell {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
 .app-thumb {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
   background: var(--el-color-success);
   color: var(--el-color-white);
   font-size: 13px;
@@ -523,7 +608,7 @@ function createApp() {
 .edit-status {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   font-size: 12px;
   color: var(--text-2);
 }

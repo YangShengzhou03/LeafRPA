@@ -6,8 +6,9 @@ import {
   CaretBottom, Connection, Upload, Document, Delete, ArrowRight,
 } from '@element-plus/icons-vue'
 import { useAppStore } from '../store'
-import { MARKET_APPS } from '../marketApps'
+import { serverApps } from '../marketApps'
 import { installedApps } from '../installedApps'
+import { t } from '../i18n'
 
 const store = useAppStore()
 const menuVisible = ref(false)
@@ -24,8 +25,8 @@ const acquiredOpen = ref(false)
 
 const apps = computed(() => store.flows.filter((f) => f.type !== 'instruction'))
 const instructions = computed(() => store.flows.filter((f) => f.type === 'instruction'))
-const acquiredApps = computed(() => MARKET_APPS.filter((a) => installedApps.value.has(a.id)))
-const appName = computed(() => `未命名应用 ${store.flows.length + 1}`)
+const acquiredApps = computed(() => serverApps.value.filter((a) => installedApps.value.has(a.id)))
+const appName = computed(() => t('sidebar.untitledApp', { n: store.flows.length + 1 }))
 
 const goMarket = () => store.setTab('market')
 
@@ -37,9 +38,9 @@ const create = (type: 'pc' | 'mobile' | 'instruction') => {
 const confirmDelete = async (e: MouseEvent, id: string) => {
   e.stopPropagation()
   try {
-    await ElMessageBox.confirm('删除后不可恢复，确定删除该流程吗？', '删除确认', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(t('sidebar.deleteConfirm'), t('sidebar.deleteTitle'), {
+      confirmButtonText: t('common.delete'),
+      cancelButtonText: t('common.cancel'),
       type: 'warning',
     })
     store.removeFlow(id)
@@ -67,52 +68,52 @@ const confirmDelete = async (e: MouseEvent, id: string) => {
             @mousemove="onCreateMove"
           >
             <el-icon :size="15"><Plus /></el-icon>
-            新建
+            {{ t('sidebar.new') }}
           </button>
         </template>
 
         <div class="create-menu">
           <div class="menu-group">
             <div class="menu-group-title">
-              自动化应用
-              <el-tooltip content="什么是自动化应用？" placement="right">
+              {{ t('sidebar.groupApps') }}
+              <el-tooltip :content="t('sidebar.whatApps')" placement="right">
                 <button class="info-btn"><el-icon :size="12"><InfoFilled /></el-icon></button>
               </el-tooltip>
             </div>
             <button class="menu-item" @click="create('pc')">
               <span class="menu-icon" style="background: #fdecec; color: #f53f3f"><el-icon :size="13"><Monitor /></el-icon></span>
-              PC自动化应用
+              {{ t('sidebar.createPc') }}
             </button>
             <button class="menu-item" @click="create('mobile')">
               <span class="menu-icon" style="background: #ecf2ff; color: #3b6fe0"><el-icon :size="13"><Iphone /></el-icon></span>
-              手机自动化应用
+              {{ t('sidebar.createMobile') }}
             </button>
           </div>
 
           <div class="menu-group">
             <div class="menu-group-title">
-              自定义指令
-              <el-tooltip content="什么是自定义指令？" placement="right">
+              {{ t('sidebar.groupInstructions') }}
+              <el-tooltip :content="t('sidebar.whatInstructions')" placement="right">
                 <button class="info-btn"><el-icon :size="12"><InfoFilled /></el-icon></button>
               </el-tooltip>
             </div>
             <button class="menu-item" @click="create('instruction')">
               <span class="menu-icon" style="background: #ecf2ff; color: #3b6fe0"><el-icon :size="13"><Monitor /></el-icon></span>
-              自定义指令
+              {{ t('sidebar.groupInstructions') }}
             </button>
           </div>
         </div>
       </el-popover>
 
       <div class="side-section">
-        <div class="side-title">我的应用</div>
+        <div class="side-title">{{ t('sidebar.myApps') }}</div>
         <div class="collapse-head" :class="{ selected: store.view === 'apps' }">
           <span class="head-main" role="button" tabindex="0" @click="store.showApps()" @keydown.enter="store.showApps()">
             <el-icon :size="15" class="row-icon"><Grid /></el-icon>
-            <span class="collapse-name">我开发的应用</span>
+            <span class="collapse-name">{{ t('sidebar.myDeveloped') }}</span>
             <span class="count">{{ apps.length }}</span>
           </span>
-          <el-tooltip content="折叠 / 展开" placement="right" :show-after="300">
+          <el-tooltip :content="t('sidebar.toggle')" placement="right" :show-after="300">
             <button class="chev-btn" @click.stop="appsOpen = !appsOpen">
               <el-icon :size="13" class="chev" :class="{ rotated: !appsOpen }"><CaretBottom /></el-icon>
             </button>
@@ -131,7 +132,7 @@ const confirmDelete = async (e: MouseEvent, id: string) => {
           >
             <span class="thumb"><el-icon :size="12"><Connection /></el-icon></span>
             <span class="name" :title="app.name">{{ app.name }}</span>
-            <el-tooltip content="删除" placement="right" :show-after="300">
+            <el-tooltip :content="t('common.delete')" placement="right" :show-after="300">
               <button class="del" @click="confirmDelete($event, app.id)">
                 <el-icon :size="12"><Delete /></el-icon>
               </button>
@@ -140,14 +141,14 @@ const confirmDelete = async (e: MouseEvent, id: string) => {
         </div>
         <div class="collapse-head" role="button" tabindex="0" @click="acquiredOpen = !acquiredOpen" @keydown.enter="acquiredOpen = !acquiredOpen">
           <el-icon :size="15" class="row-icon"><Upload /></el-icon>
-          <span class="collapse-name">我获取的应用</span>
+          <span class="collapse-name">{{ t('sidebar.acquired') }}</span>
           <span class="count">{{ acquiredApps.length }}</span>
           <el-icon :size="13" class="chev" :class="{ rotated: !acquiredOpen }"><CaretBottom /></el-icon>
         </div>
         <div v-if="acquiredOpen" class="collapse-body">
-          <el-empty v-if="!acquiredApps.length" :image-size="72" description="还没有安装市场应用">
+          <el-empty v-if="!acquiredApps.length" :image-size="72" :description="t('sidebar.noAcquired')">
             <button class="acquired-go" @click="goMarket">
-              去市场看看
+              {{ t('sidebar.goMarket') }}
               <el-icon :size="12"><ArrowRight /></el-icon>
             </button>
           </el-empty>
@@ -168,7 +169,7 @@ const confirmDelete = async (e: MouseEvent, id: string) => {
       </div>
 
       <div class="side-section">
-        <div class="side-title">自定义指令</div>
+        <div class="side-title">{{ t('sidebar.groupInstructions') }}</div>
         <div
           class="collapse-head"
           role="button"
@@ -177,7 +178,7 @@ const confirmDelete = async (e: MouseEvent, id: string) => {
           @keydown.enter="instructionsOpen = !instructionsOpen"
         >
           <el-icon :size="15" class="row-icon"><Document /></el-icon>
-          <span class="collapse-name">我开发的指令</span>
+          <span class="collapse-name">{{ t('sidebar.myInstructions') }}</span>
           <el-icon :size="13" class="chev" :class="{ rotated: !instructionsOpen }"><CaretBottom /></el-icon>
         </div>
         <div v-if="instructionsOpen" class="collapse-body">
@@ -193,7 +194,7 @@ const confirmDelete = async (e: MouseEvent, id: string) => {
           >
             <span class="thumb" style="background: #22c55e"><el-icon :size="12"><Connection /></el-icon></span>
             <span class="name" :title="inst.name">{{ inst.name }}</span>
-            <el-tooltip content="删除" placement="right" :show-after="300">
+            <el-tooltip :content="t('common.delete')" placement="right" :show-after="300">
               <button class="del" @click="confirmDelete($event, inst.id)">
                 <el-icon :size="12"><Delete /></el-icon>
               </button>
@@ -224,8 +225,8 @@ const confirmDelete = async (e: MouseEvent, id: string) => {
   border: none;
   background: transparent;
   padding: 0;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;

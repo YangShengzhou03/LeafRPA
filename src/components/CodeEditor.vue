@@ -64,13 +64,13 @@ watch(
   display: flex;
   height: 160px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
   background: var(--panel);
 }
 .gutter {
   flex: 0 0 36px;
-  padding: 8px 6px;
+  padding: 8px;
   text-align: right;
   font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
   font-size: 12px;

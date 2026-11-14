@@ -1,4 +1,5 @@
 import { ElNotification } from 'element-plus'
+import { t } from './i18n'
 
 export type ToastPosition = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
 
@@ -20,9 +21,9 @@ export interface ToastOptions {
 /** 第二参数既兼容旧的字符串标题，也支持富选项 */
 export type ToastInput = string | ToastOptions
 
-function build(message: string, input: ToastInput | undefined, fallbackTitle: string) {
-  const opts: ToastOptions = typeof input === 'string' ? { title: input } : { title: fallbackTitle, ...input }
-  const params: Record<string, unknown> = { title: opts.title ?? fallbackTitle, message }
+function build(message: string, input: ToastInput | undefined, fallbackTitleKey: Parameters<typeof t>[0]) {
+  const opts: ToastOptions = typeof input === 'string' ? { title: input } : { title: t(fallbackTitleKey), ...input }
+  const params: Record<string, unknown> = { title: opts.title ?? t(fallbackTitleKey), message }
   if (opts.duration != null) params.duration = opts.duration
   if (opts.position) params.position = opts.position
   if (opts.offset != null) params.offset = opts.offset
@@ -33,22 +34,22 @@ function build(message: string, input: ToastInput | undefined, fallbackTitle: st
 
 /** 成功通知（默认 2.6s 自动关闭） */
 export function toastSuccess(message: string, input?: ToastInput) {
-  ElNotification.success(build(message, input, '操作成功'))
+  ElNotification.success(build(message, input, 'notify.success'))
 }
 
 /** 信息通知（默认 2.6s 自动关闭） */
 export function toastInfo(message: string, input?: ToastInput) {
-  ElNotification.info(build(message, input, '提示'))
+  ElNotification.info(build(message, input, 'notify.info'))
 }
 
 /** 警告通知（默认 2.6s 自动关闭） */
 export function toastWarning(message: string, input?: ToastInput) {
-  ElNotification.warning(build(message, input, '注意'))
+  ElNotification.warning(build(message, input, 'notify.warning'))
 }
 
 /** 错误通知（默认 4s 自动关闭，停留更久便于阅读） */
 export function toastError(message: string, input?: ToastInput) {
-  const params = build(message, input, '操作失败')
+  const params = build(message, input, 'notify.error')
   params.duration = (typeof input === 'object' && input?.duration != null) ? input.duration : 4000
   ElNotification.error(params)
 }

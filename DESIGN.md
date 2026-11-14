@@ -2,6 +2,13 @@
 
 本文档约束 leaf-rpa 的视觉基调与 UI 编写规则。所有界面改动必须遵守本文档；新增颜色、圆角、阴影等设计值时，应先在 `src/style.css` 中定义 CSS 变量，再通过变量引用，禁止在组件里硬编码新的散落值。
 
+## 0. 强制规则（违反即打回）
+
+- **禁用 emoji**：界面文案、注释、日志、提示信息一律不得出现 emoji（pre-commit 有 `check:emoji` 校验）。
+- **禁用 Element Plus 的 `small` 尺寸组件**：不得使用 `size="small"`（含 `el-button`、`el-input`、`el-tag`、`el-table` 等一切组件）；需要紧凑排版时通过间距变量调整，不缩小控件尺寸。默认尺寸为唯一基准。
+- **必须使用 Element Plus 组件库**：按钮、输入框、下拉、单选、复选、开关、对话框、消息、标签、分页等一律使用 Element Plus 现成组件，**禁止手搓**（不得用原生 `<div>/<button>` + CSS 仿造控件）。Element Plus 已有的能力（含 `el-tooltip`、`el-empty`、`el-rate`、`el-pagination`）必须直接使用。
+- 唯一例外：顶栏窗口控制、品牌区、拖拽热区等**无现成组件对应的纯装饰/窗口级元素**，以及画布、流程步骤列表等领域专属视图，允许自定义实现，但其中的控件（按钮、输入、确认框等）仍必须用 Element Plus。
+
 ## 1. 主题色基调
 
 项目采用**红为主色、中性灰为骨架**的亮色主题，参照国内桌面效率工具的视觉习惯，整体气质：轻量、克制、亲和。
@@ -73,7 +80,7 @@
 - 主按钮用 Element Plus `type="primary"`（Element Plus 主题已在 `style.css` 中对齐品牌红：`--el-color-primary` 系列变量）；次级操作用 `text` / `link` 按钮。
 - 危险操作（删除、卸载）用 `type="danger"`，且必须带 `ElMessageBox.confirm` 确认。
 - 操作反馈统一使用 `ElMessage`（成功 / 警告 / 失败），不使用 `alert`。
-- 标签（tag）级别映射：入门→`success`、进阶→`primary`、实战→`warning`、类型标签→`info`，统一 `size="small" effect="light" round`。
+- 标签（tag）级别映射：入门→`success`、进阶→`primary`、实战→`warning`、类型标签→`info`，统一 `effect="light" round`。
 - 空状态使用 `el-empty` 或统一的 `.empty` / `.canvas-empty` 样式，并给出下一步动作指引文案。
 - 表格使用 `--el-table-border-color: var(--border)`、`--el-table-header-bg-color: var(--panel)` 对齐主题。
 
