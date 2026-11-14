@@ -115,19 +115,21 @@ scripts/setup-python.mjs
 
 服务端由三个容器组成：`mysql:8.0`（数据库，不暴露端口）、`leaf-rpa-backend`（Spring Boot，不暴露端口）、`leaf-rpa-frontend`（nginx，唯一入口 80/443，`/api/` 前缀反代后端）。镜像已发布到 Docker Hub：`yangshengzhou/leafrpa:backend-v1`、`yangshengzhou/leafrpa:frontend-v1`。
 
-**前置条件**：一台装好 Docker（含 compose 插件）的 Linux 服务器，无需其他环境。
+**前置条件**：一台装好 Docker（含 compose 插件）的 Linux 服务器，无需克隆仓库、无需手动配置密钥。
 
 ```bash
-# 1. 获取编排文件（三样：docker-compose.yml / sql/init-db.sql / deploy-server.sh，目录结构需保持 service/ 原样）
-git clone https://gitee.com/Yangshengzhou/leaf-rpa.git
-cd leaf-rpa/service
+# 1. 只下载部署脚本（其余编排文件由脚本自动从 Gitee 拉取）
+curl -fsSL https://gitee.com/Yangshengzhou/leaf-rpa/raw/master/service/deploy-server.sh -o deploy-server.sh
 
-# 2.（生产必须）写入 JWT 密钥
-echo 'LEAF_JWT_SECRET=<强随机值，至少32字节>' > .env
-
-# 3. 一键部署：自动建 docker 网络 → 拉镜像 → 起容器 → 健康检查
+# 2. 一键部署：自动下载编排文件 → 自动生成 JWT 密钥 → 建 docker 网络 → 拉镜像 → 起容器 → 健康检查
 bash deploy-server.sh
 ```
+
+脚本行为说明：
+
+- 编排文件（`docker-compose.yml`、`sql/init-db.sql`）本地缺失时自动从 Gitee 下载，已存在则沿用（便于自定义修改）
+- JWT 密钥首次部署自动生成（`openssl rand -hex 32`）写入 `.env`，重启沿用同一密钥，已登录会话不会失效
+- 可先执行 `bash deploy-server.sh check` 只准备文件与镜像，不启动容器
 
 完成后访问 `http://<服务器IP>/` 即可，桌面客户端默认连接 `http://<服务器IP>`（可在客户端设置中修改，或构建时用 `VITE_SERVER_BASE` 指定）。
 
