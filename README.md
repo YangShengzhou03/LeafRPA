@@ -127,7 +127,7 @@ bash deploy-server.sh
 
 脚本行为说明：
 
-- 编排文件（`docker-compose.yml`、`sql/init-db.sql`）本地缺失时自动从 Gitee 下载，已存在则沿用（便于自定义修改）
+- 编排文件（`docker-compose.yml`、`sql/init-db.sql`）本地缺失时自动下载（Gitee 为主源，GitHub 镜像回退，失败可手动放置后重跑），已存在则沿用（便于自定义修改）
 - JWT 密钥首次部署自动生成（`openssl rand -hex 32`）写入 `.env`，重启沿用同一密钥，已登录会话不会失效
 - 可先执行 `bash deploy-server.sh check` 只准备文件与镜像，不启动容器
 

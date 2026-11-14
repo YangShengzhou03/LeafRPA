@@ -7,17 +7,34 @@
 set -e
 cd "$(dirname "$0")"
 
-REPO_RAW="https://gitee.com/Yangshengzhou/leaf-rpa/raw/master/service"
+# 多镜像回退：Gitee raw 失败（如重定向域名被墙/SSL 故障）时依次尝试
+RAW_MIRRORS=(
+  "https://gitee.com/Yangshengzhou/leaf-rpa/raw/master"
+  "https://ghproxy.net/https://raw.githubusercontent.com/Yangshengzhou/leaf-rpa/master"
+  "https://raw.githubusercontent.com/Yangshengzhou/leaf-rpa/master"
+)
 
-# 1. 准备编排文件（本地没有则从 Gitee 下载，无需克隆整个仓库）
+# fetch <相对路径> <目标文件>：逐镜像尝试，成功且非空即返回
+fetch() {
+  local rel="$1" dest="$2" url
+  for base in "${RAW_MIRRORS[@]}"; do
+    url="$base/$rel"
+    echo "尝试下载 $url"
+    if curl -fsSL --retry 2 --connect-timeout 10 "$url" -o "$dest" && [ -s "$dest" ]; then
+      return 0
+    fi
+  done
+  echo "下载失败：$rel。请手动将该文件放到 $(pwd) 后重新执行本脚本"
+  return 1
+}
+
+# 1. 准备编排文件（本地没有则从远程镜像源下载，无需克隆整个仓库）
 if [ ! -f docker-compose.yml ]; then
-  echo "下载 docker-compose.yml ..."
-  curl -fsSL "$REPO_RAW/docker-compose.yml" -o docker-compose.yml
+  fetch "service/docker-compose.yml" docker-compose.yml || exit 1
 fi
 mkdir -p sql
 if [ ! -f sql/init-db.sql ]; then
-  echo "下载 sql/init-db.sql ..."
-  curl -fsSL "$REPO_RAW/sql/init-db.sql" -o sql/init-db.sql
+  fetch "service/sql/init-db.sql" sql/init-db.sql || exit 1
 fi
 
 # 2. 自动生成 JWT 密钥（已存在则沿用，保证重启后已登录会话不失效）
