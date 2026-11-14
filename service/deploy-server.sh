@@ -9,6 +9,7 @@ cd "$(dirname "$0")"
 
 # 多镜像回退：Gitee raw 失败（如重定向域名被墙/SSL 故障）时依次尝试
 RAW_MIRRORS=(
+  "https://raw.giteeusercontent.com/Yangshengzhou/leaf-rpa/raw/master"
   "https://gitee.com/Yangshengzhou/leaf-rpa/raw/master"
   "https://ghproxy.net/https://raw.githubusercontent.com/Yangshengzhou/leaf-rpa/master"
   "https://raw.githubusercontent.com/Yangshengzhou/leaf-rpa/master"

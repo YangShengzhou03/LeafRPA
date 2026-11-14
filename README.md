@@ -118,8 +118,8 @@ scripts/setup-python.mjs
 **前置条件**：一台装好 Docker（含 compose 插件）的 Linux 服务器，无需克隆仓库、无需手动配置密钥。
 
 ```bash
-# 1. 只下载部署脚本（其余编排文件由脚本自动从 Gitee 拉取）
-curl -fsSL https://gitee.com/Yangshengzhou/leaf-rpa/raw/master/service/deploy-server.sh -o deploy-server.sh
+# 1. 只下载部署脚本（其余编排文件由脚本自动拉取，多镜像源回退）
+curl -fsSL https://raw.giteeusercontent.com/Yangshengzhou/leaf-rpa/raw/master/service/deploy-server.sh -o deploy-server.sh
 
 # 2. 一键部署：自动下载编排文件 → 自动生成 JWT 密钥 → 建 docker 网络 → 拉镜像 → 起容器 → 健康检查
 bash deploy-server.sh
